@@ -50,6 +50,27 @@ function hashSource(model: string, source: string): string {
   return createHash("sha256").update(`${model}\n${source}`).digest("hex");
 }
 
+// Backoff waits (ms) for transient per-minute rate limits. If a call still gets
+// rate-limited after the last wait, we treat it as the daily quota being
+// exhausted and let the caller stop the run (it resumes next time).
+const BACKOFF_MS = [20_000, 40_000, 60_000];
+
+/** Run an AI call, waiting out per-minute rate limits; rethrows on exhaustion. */
+async function callWithBackoff<T>(fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (isRateLimited(err) && attempt < BACKOFF_MS.length) {
+        log(`  rate limited — waiting ${BACKOFF_MS[attempt] / 1000}s before retry`);
+        await sleep(BACKOFF_MS[attempt]);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 async function tagThemes(limit: number): Promise<{ dossiers: number; themes: number }> {
   // Dossiers not yet processed by the tagging step.
   let pending = await db
@@ -64,7 +85,9 @@ async function tagThemes(limit: number): Promise<{ dossiers: number; themes: num
   let done = 0;
   for (const d of pending) {
     try {
-      const themes = await tagDossierThemes({ titre: d.titre, type: d.type });
+      const themes = await callWithBackoff(() =>
+        tagDossierThemes({ titre: d.titre, type: d.type }),
+      );
       if (themes.length > 0) {
         await db
           .insert(schema.dossierThemes)
@@ -79,7 +102,7 @@ async function tagThemes(limit: number): Promise<{ dossiers: number; themes: num
         .where(eq(schema.dossiers.id, d.id));
     } catch (err) {
       if (isRateLimited(err)) {
-        log(`  rate limit reached — stopping tagging (resumes next run)`);
+        log(`  daily quota reached — stopping tagging (resumes next run)`);
         break;
       }
       log(`  dossier ${d.id} failed: ${(err as Error)?.message ?? err}`);
@@ -135,7 +158,9 @@ async function explainScrutins(limit: number): Promise<number> {
       dossierType: row.dType,
     };
     try {
-      const { explanation, summary } = await explainScrutin(input);
+      const { explanation, summary } = await callWithBackoff(() =>
+        explainScrutin(input),
+      );
       const sourceHash = hashSource(WRITING_MODEL, explanationSource(input));
       await db
         .insert(schema.scrutinAi)
@@ -159,7 +184,7 @@ async function explainScrutins(limit: number): Promise<number> {
         });
     } catch (err) {
       if (isRateLimited(err)) {
-        log(`  rate limit reached — stopping explanations (resumes next run)`);
+        log(`  daily quota reached — stopping explanations (resumes next run)`);
         break;
       }
       log(`  scrutin ${row.s.id} failed: ${(err as Error)?.message ?? err}`);
