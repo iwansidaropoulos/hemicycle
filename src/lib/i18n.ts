@@ -45,6 +45,7 @@ export const fr = {
     title: "Scrutins",
     searchPlaceholder: "Rechercher par titre…",
     allThemes: "Tous les thèmes",
+    solemnOnly: "Scrutins solennels",
     none: "Aucun scrutin ne correspond.",
     count: (n: number) => `${n.toLocaleString("fr-FR")} scrutin${n > 1 ? "s" : ""}`,
     votants: "votants",

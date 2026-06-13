@@ -24,14 +24,18 @@ export const PAGE_SIZE = 20;
 export interface ScrutinFilter {
   q?: string;
   theme?: string;
+  solennel?: boolean;
   limit?: number;
   offset?: number;
 }
 
-function scrutinWhere({ q, theme }: ScrutinFilter) {
+function scrutinWhere({ q, theme, solennel }: ScrutinFilter) {
   const clauses = [];
   if (q && q.trim()) {
     clauses.push(like(scrutins.titre, `%${q.trim()}%`));
+  }
+  if (solennel) {
+    clauses.push(eq(scrutins.forme, "solennel"));
   }
   if (theme) {
     // Scrutins inherit their dossier's themes.

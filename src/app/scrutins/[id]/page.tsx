@@ -4,7 +4,10 @@ import { notFound } from "next/navigation";
 import { AiBlock } from "@/components/ai-block";
 import { FormeBadge, ResultBadge } from "@/components/badges";
 import { GroupBreakdown } from "@/components/group-breakdown";
-import { Hemicycle, type HemicycleGroup } from "@/components/hemicycle";
+import {
+  ScrutinHemicycle,
+  type ScrutinHemicycleGroup,
+} from "@/components/scrutin-hemicycle";
 import {
   getDossier,
   getScrutinAi,
@@ -50,16 +53,24 @@ export default async function ScrutinDetailPage({
         : Promise.resolve(null),
     ]);
 
-  // Largest groups first for both the chart and the breakdown table.
+  // Largest groups first for the breakdown table.
   const ordered = [...groupResults].sort(
     (a, b) => (b.group?.effectif ?? 0) - (a.group?.effectif ?? 0),
   );
-  const hemicycleGroups: HemicycleGroup[] = ordered.map(({ result }) => ({
-    pour: result.pour,
-    contre: result.contre,
-    abstention: result.abstention,
-    nonVotant: result.nonVotant,
-  }));
+  // The hemicycle re-orders these left→right by political position itself.
+  const hemicycleGroups: ScrutinHemicycleGroup[] = ordered.map(
+    ({ group, result }) => ({
+      id: group?.id ?? result.groupId,
+      abrege: group?.abrege ?? null,
+      libelle: group?.libelle ?? result.groupId,
+      couleur: group?.couleur ?? null,
+      pour: result.pour,
+      contre: result.contre,
+      abstention: result.abstention,
+      nonVotant: result.nonVotant,
+      effectif: result.effectif,
+    }),
+  );
 
   const votesByGroup = new Map<string, SeatVote[]>();
   for (const v of votes) {
@@ -153,7 +164,7 @@ export default async function ScrutinDetailPage({
         <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
           {fr.detail.hemicycle}
         </h2>
-        <Hemicycle groups={hemicycleGroups} />
+        <ScrutinHemicycle groups={hemicycleGroups} />
       </section>
 
       {/* Per-group breakdown */}

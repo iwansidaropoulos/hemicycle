@@ -10,6 +10,7 @@ export const metadata = { title: `${fr.scrutins.title} — ${fr.appName}` };
 interface SearchParams {
   q?: string;
   theme?: string;
+  solennel?: string;
   page?: string;
 }
 
@@ -22,10 +23,12 @@ export default async function ScrutinsPage({
   const page = Math.max(1, Number(sp.page) || 1);
   const q = sp.q?.trim() || undefined;
   const theme = sp.theme && isKnownTheme(sp.theme) ? sp.theme : undefined;
+  const solennel = sp.solennel === "1";
 
   const { rows, total } = await listScrutins({
     q,
     theme,
+    solennel,
     limit: PAGE_SIZE,
     offset: (page - 1) * PAGE_SIZE,
   });
@@ -36,13 +39,13 @@ export default async function ScrutinsPage({
         <h1 className="text-2xl font-semibold tracking-tight">
           {fr.scrutins.title}
         </h1>
-        <span className="text-sm text-zinc-500">{fr.scrutins.count(total)}</span>
+        <span className="text-sm text-zinc-500 dark:text-zinc-400">{fr.scrutins.count(total)}</span>
       </div>
 
       <ScrutinFilters />
 
       {rows.length === 0 ? (
-        <p className="py-12 text-center text-zinc-500">{fr.scrutins.none}</p>
+        <p className="py-12 text-center text-zinc-500 dark:text-zinc-400">{fr.scrutins.none}</p>
       ) : (
         <div className="space-y-3">
           {rows.map((s) => (
@@ -56,7 +59,7 @@ export default async function ScrutinsPage({
         total={total}
         pageSize={PAGE_SIZE}
         basePath="/scrutins"
-        params={{ q, theme }}
+        params={{ q, theme, solennel: solennel ? "1" : undefined }}
       />
     </div>
   );

@@ -16,6 +16,7 @@ export function ScrutinFilters() {
   const params = useSearchParams();
   const urlQ = params.get("q") ?? "";
   const theme = params.get("theme") ?? "";
+  const solennel = params.get("solennel") === "1";
   const [q, setQ] = useState(urlQ);
 
   // Keep the input in sync if the URL changes externally (e.g. back button),
@@ -26,7 +27,7 @@ export function ScrutinFilters() {
     setQ(urlQ);
   }
 
-  function pushParams(next: { q?: string; theme?: string }) {
+  function pushParams(next: { q?: string; theme?: string; solennel?: string }) {
     const sp = new URLSearchParams(params.toString());
     for (const [key, value] of Object.entries(next)) {
       if (value) sp.set(key, value);
@@ -66,6 +67,15 @@ export function ScrutinFilters() {
           </option>
         ))}
       </select>
+      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900">
+        <input
+          type="checkbox"
+          checked={solennel}
+          onChange={(e) => pushParams({ solennel: e.target.checked ? "1" : "" })}
+          className="accent-indigo-600"
+        />
+        {fr.scrutins.solemnOnly}
+      </label>
     </div>
   );
 }
