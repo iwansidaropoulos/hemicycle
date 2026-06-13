@@ -49,8 +49,7 @@ CREATE TABLE `scrutin_group_results` (
 	`non_votant` integer DEFAULT 0 NOT NULL,
 	`effectif` integer DEFAULT 0 NOT NULL,
 	PRIMARY KEY(`scrutin_id`, `group_id`),
-	FOREIGN KEY (`scrutin_id`) REFERENCES `scrutins`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`group_id`) REFERENCES `groups`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`scrutin_id`) REFERENCES `scrutins`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE INDEX `sgr_group_idx` ON `scrutin_group_results` (`group_id`);--> statement-breakpoint
@@ -61,6 +60,7 @@ CREATE TABLE `scrutins` (
 	`titre` text NOT NULL,
 	`objet` text,
 	`forme` text DEFAULT 'ordinaire' NOT NULL,
+	`type_code` text,
 	`is_final` integer DEFAULT false NOT NULL,
 	`resultat` text,
 	`count_pour` integer DEFAULT 0 NOT NULL,
@@ -70,8 +70,7 @@ CREATE TABLE `scrutins` (
 	`session_id` text,
 	`dossier_id` text,
 	`url` text,
-	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`dossier_id`) REFERENCES `dossiers`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`session_id`) REFERENCES `sessions`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE INDEX `scrutins_date_idx` ON `scrutins` (`date`);--> statement-breakpoint
@@ -98,8 +97,7 @@ CREATE TABLE `votes` (
 	`deputy_id` text NOT NULL,
 	`position` text NOT NULL,
 	PRIMARY KEY(`scrutin_id`, `deputy_id`),
-	FOREIGN KEY (`scrutin_id`) REFERENCES `scrutins`(`id`) ON UPDATE no action ON DELETE no action,
-	FOREIGN KEY (`deputy_id`) REFERENCES `deputies`(`id`) ON UPDATE no action ON DELETE no action
+	FOREIGN KEY (`scrutin_id`) REFERENCES `scrutins`(`id`) ON UPDATE no action ON DELETE no action
 );
 --> statement-breakpoint
 CREATE INDEX `votes_deputy_idx` ON `votes` (`deputy_id`);

@@ -10,11 +10,13 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "ingest": "tsx pipeline/ingest.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.3",
     "drizzle-orm": "^0.45.2",
+    "fflate": "^0.8.3",
     "next": "16.2.9",
     "react": "19.2.4",
     "react-dom": "19.2.4"

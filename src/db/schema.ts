@@ -91,6 +91,10 @@ export const scrutins = sqliteTable(
     // Longer description of what is being voted on.
     objet: text("objet"),
     forme: text("forme").$type<ScrutinForme>().notNull().default("ordinaire"),
+    // Raw AN vote-type code: SPO (ordinaire), SPS (solennel), MOC (motion de
+    // censure). Kept so AI enrichment can target the significant subset
+    // (SPS + MOC + is_final) precisely.
+    typeCode: text("type_code"),
     // Whether this is a vote on a whole text (vote sur l'ensemble).
     isFinal: integer("is_final", { mode: "boolean" })
       .notNull()
@@ -103,7 +107,8 @@ export const scrutins = sqliteTable(
     countNonVotant: integer("count_non_votant").default(0).notNull(),
     sessionId: text("session_id").references(() => sessions.id),
     // Parent legislative file; lets us roll amendment votes up to their text.
-    dossierId: text("dossier_id").references(() => dossiers.id),
+    // No FK: the referenced dossier may not be present in the dossiers archive.
+    dossierId: text("dossier_id"),
     url: text("url"),
   },
   (t) => [
@@ -125,9 +130,11 @@ export const votes = sqliteTable(
     scrutinId: text("scrutin_id")
       .notNull()
       .references(() => scrutins.id),
-    deputyId: text("deputy_id")
-      .notNull()
-      .references(() => deputies.id),
+    // No FK to deputies: a vote is an immutable historical fact and may
+    // reference a deputy who has since left (and so is absent from the
+    // active-deputies dataset). The per-group aggregate counts remain
+    // authoritative regardless.
+    deputyId: text("deputy_id").notNull(),
     position: text("position").$type<VotePosition>().notNull(),
   },
   (t) => [
@@ -146,9 +153,9 @@ export const scrutinGroupResults = sqliteTable(
     scrutinId: text("scrutin_id")
       .notNull()
       .references(() => scrutins.id),
-    groupId: text("group_id")
-      .notNull()
-      .references(() => groups.id),
+    // No FK to groups: historical ventilations may reference a group that has
+    // since been dissolved and is absent from the active-groups dataset.
+    groupId: text("group_id").notNull(),
     pour: integer("pour").default(0).notNull(),
     contre: integer("contre").default(0).notNull(),
     abstention: integer("abstention").default(0).notNull(),

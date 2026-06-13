@@ -1,0 +1,21 @@
+{
+  "startedAt": "2026-06-13T10:34:05.795Z",
+  "finishedAt": "2026-06-13T10:34:29.468Z",
+  "durationMs": 23673,
+  "counts": {
+    "groups": 12,
+    "deputies": 577,
+    "dossiers": 2647,
+    "sessionsNew": 19,
+    "scrutinsTotalAvailable": 7397,
+    "scrutinsInDbBefore": 0,
+    "scrutinsInserted": 20,
+    "groupResultsInserted": 240,
+    "votesInserted": 2985
+  },
+  "datasets": {
+    "scrutins": "https://data.assemblee-nationale.fr/static/openData/repository/17/loi/scrutins/Scrutins.json.zip",
+    "dossiers": "https://data.assemblee-nationale.fr/static/openData/repository/17/loi/dossiers_legislatifs/Dossiers_Legislatifs.json.zip",
+    "acteurs": "https://data.assemblee-nationale.fr/static/openData/repository/17/amo/deputes_actifs_mandats_actifs_organes/AMO10_deputes_actifs_mandats_actifs_organes.json.zip"
+  }
+}

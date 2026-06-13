@@ -1,0 +1,66 @@
+# Daily ingestion pipeline (brief §6/§9).
+#
+# Runs the TypeScript pipeline that downloads the Assemblée nationale open data
+# and writes it to Turso. This is where all the slow/heavy work happens — it
+# never runs in a Vercel function.
+#
+# Secrets required (Settings → Secrets and variables → Actions):
+#   TURSO_DATABASE_URL, TURSO_AUTH_TOKEN
+#   (ANTHROPIC_API_KEY is added later, for the AI enrichment phase.)
+#
+# The committed state file (data/last-run.json) doubles as activity to keep the
+# scheduled workflow from being disabled after 60 days, and the push it creates
+# triggers a fresh Vercel deployment so new scrutins go live.
+
+name: ingest
+
+on:
+  schedule:
+    # 05:00 UTC every day.
+    - cron: "0 5 * * *"
+  workflow_dispatch: {}
+
+# Allow the job to push the updated state file back to the repo.
+permissions:
+  contents: write
+
+# Never run two ingests at once.
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
+      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply database migrations
+        run: npm run db:migrate
+
+      - name: Run ingestion
+        run: npm run ingest
+
+      - name: Commit run state
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/last-run.json
+          if git diff --staged --quiet; then
+            echo "No state change to commit."
+          else
+            git commit -m "chore: update ingestion state [skip ci]"
+            git push
+          fi

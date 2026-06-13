@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "38a10b4e-f22e-4db0-a893-21c6cf146a19",
+  "id": "ba463889-5050-48d9-a998-84d32e2dac9e",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
     "deputies": {
@@ -349,19 +349,6 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
-        },
-        "scrutin_group_results_group_id_groups_id_fk": {
-          "name": "scrutin_group_results_group_id_groups_id_fk",
-          "tableFrom": "scrutin_group_results",
-          "tableTo": "groups",
-          "columnsFrom": [
-            "group_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
         }
       },
       "compositePrimaryKeys": {
@@ -421,6 +408,13 @@
           "notNull": true,
           "autoincrement": false,
           "default": "'ordinaire'"
+        },
+        "type_code": {
+          "name": "type_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         },
         "is_final": {
           "name": "is_final",
@@ -529,19 +523,6 @@
           "tableTo": "sessions",
           "columnsFrom": [
             "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "scrutins_dossier_id_dossiers_id_fk": {
-          "name": "scrutins_dossier_id_dossiers_id_fk",
-          "tableFrom": "scrutins",
-          "tableTo": "dossiers",
-          "columnsFrom": [
-            "dossier_id"
           ],
           "columnsTo": [
             "id"
@@ -686,19 +667,6 @@
           "tableTo": "scrutins",
           "columnsFrom": [
             "scrutin_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "votes_deputy_id_deputies_id_fk": {
-          "name": "votes_deputy_id_deputies_id_fk",
-          "tableFrom": "votes",
-          "tableTo": "deputies",
-          "columnsFrom": [
-            "deputy_id"
           ],
           "columnsTo": [
             "id"
