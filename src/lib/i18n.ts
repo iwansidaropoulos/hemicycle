@@ -35,4 +35,55 @@ export const fr = {
     adopte: "Adopté",
     rejete: "Rejeté",
   },
+  forme: {
+    solennel: "Scrutin solennel",
+    ordinaire: "Scrutin ordinaire",
+    motion: "Motion de censure",
+  },
+  scrutins: {
+    title: "Scrutins",
+    searchPlaceholder: "Rechercher par titre…",
+    allThemes: "Tous les thèmes",
+    none: "Aucun scrutin ne correspond.",
+    count: (n: number) => `${n.toLocaleString("fr-FR")} scrutin${n > 1 ? "s" : ""}`,
+    votants: "votants",
+  },
+  groups: {
+    title: "Groupes parlementaires",
+    members: "députés",
+    participation: "participation",
+    votedFor: "A voté pour",
+    votedAgainst: "A voté contre",
+    abstained: "S'est abstenu",
+    absent: "N'a pas pris part",
+    mixed: "Vote partagé",
+    seeVotes: "Voir les votes du groupe",
+  },
+  themes: {
+    title: "Thèmes",
+    intro:
+      "Les thèmes sont attribués aux dossiers législatifs ; chaque scrutin hérite des thèmes de son dossier.",
+    empty:
+      "Les thèmes seront disponibles une fois l'enrichissement par IA effectué.",
+    count: (n: number) => `${n} scrutin${n > 1 ? "s" : ""}`,
+  },
+  pagination: {
+    previous: "Précédent",
+    next: "Suivant",
+    page: (n: number) => `Page ${n}`,
+  },
+  ai: {
+    badge: "Généré par IA",
+    explanation: "En quoi consiste le scrutin",
+    sessionSummary: "Résumé de la séance",
+    notYet: "Pas encore disponible.",
+  },
+  detail: {
+    officialLink: "Voir sur le site de l'Assemblée nationale",
+    byGroup: "Répartition par groupe",
+    hemicycle: "Répartition dans l'hémicycle",
+    counts: "Décompte",
+    dossier: "Dossier législatif",
+    backToList: "← Tous les scrutins",
+  },
 } as const;
