@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { AiBlock } from "@/components/ai-block";
+import { AiBlock, type AiSource } from "@/components/ai-block";
 import { FormeBadge, ResultBadge } from "@/components/badges";
 import { GroupBreakdown } from "@/components/group-breakdown";
 import {
@@ -71,6 +71,16 @@ export default async function ScrutinDetailPage({
       effectif: result.effectif,
     }),
   );
+
+  // Grounding sources stored as a JSON string on the AI row.
+  let aiSources: AiSource[] = [];
+  if (ai?.sources) {
+    try {
+      aiSources = JSON.parse(ai.sources) as AiSource[];
+    } catch {
+      aiSources = [];
+    }
+  }
 
   const votesByGroup = new Map<string, SeatVote[]>();
   for (const v of votes) {
@@ -157,7 +167,11 @@ export default async function ScrutinDetailPage({
         ))}
       </section>
 
-      <AiBlock title={fr.ai.explanation} content={ai?.explanation} />
+      <AiBlock
+        title={fr.ai.explanation}
+        content={ai?.explanation}
+        sources={aiSources}
+      />
 
       {/* Hemicycle */}
       <section className="space-y-2">

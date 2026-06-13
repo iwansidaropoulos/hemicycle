@@ -83,6 +83,7 @@ export const fr = {
     explanation: "En quoi consiste le scrutin",
     sessionSummary: "Résumé de la séance",
     notYet: "Pas encore disponible.",
+    sources: "Sources",
   },
   detail: {
     officialLink: "Voir sur le site de l'Assemblée nationale",

@@ -186,6 +186,8 @@ export const scrutinAi = sqliteTable("scrutin_ai", {
   explanation: text("explanation"),
   // Short neutral summary, in French.
   summary: text("summary"),
+  // JSON array of web sources (title + url) the explanation is grounded in.
+  sources: text("sources"),
   generatedAt: text("generated_at").default(sql`CURRENT_TIMESTAMP`),
   model: text("model"),
   // Hash of the source material; lets the pipeline skip unchanged items.

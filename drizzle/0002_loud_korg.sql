@@ -1,0 +1,1 @@
+ALTER TABLE `scrutin_ai` ADD `sources` text;

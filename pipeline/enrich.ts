@@ -29,9 +29,8 @@ import { chunk, sleep } from "./lib/util";
 import { TAGGING_MODEL, WRITING_MODEL, isRateLimited } from "./ai/client";
 import { tagDossiersBatch } from "./ai/tag-themes";
 import {
-  explainScrutinsBatch,
+  explainScrutinGrounded,
   explanationSource,
-  type ScrutinBatchItem,
   type ScrutinInput,
 } from "./ai/explain-scrutin";
 
@@ -42,10 +41,10 @@ const SIGNIFICANT_CODES = ["SPS", "MOC"];
 
 // Delay between requests (the free tier caps requests/day, not per-second).
 const DELAY_MS = Number(process.env.AI_DELAY_MS) || 1500;
-// Items per request — batching keeps the backfill within the free-tier
-// daily request quota (~20 requests/day per model).
+// Dossiers per tagging request — batching keeps within the free-tier daily
+// request quota (~20 requests/day per model). Explanations are grounded
+// (Google Search), so they run one scrutin per request.
 const TAG_BATCH = Number(process.env.TAG_BATCH) || 40;
-const EXPLAIN_BATCH = Number(process.env.EXPLAIN_BATCH) || 10;
 
 function log(msg: string) {
   console.log(`[enrich] ${msg}`);
@@ -157,81 +156,58 @@ async function explainScrutins(limit: number): Promise<number> {
     ).map((r) => [r.id, r.hash]),
   );
 
-  let todo = eligible.filter((row) => {
-    const input: ScrutinInput = {
-      titre: row.s.titre,
-      objet: row.s.objet,
-      dossierTitre: row.dTitre,
-      dossierType: row.dType,
-    };
-    return existing.get(row.s.id) !== hashSource(WRITING_MODEL, explanationSource(input));
+  const inputOf = (row: (typeof eligible)[number]): ScrutinInput => ({
+    titre: row.s.titre,
+    objet: row.s.objet,
+    dossierTitre: row.dTitre,
+    dossierType: row.dType,
   });
+  // The grounded source includes a tag so changing the strategy re-generates.
+  const hashOf = (row: (typeof eligible)[number]) =>
+    hashSource(`${WRITING_MODEL}|grounded`, explanationSource(inputOf(row)));
+
+  let todo = eligible.filter((row) => existing.get(row.s.id) !== hashOf(row));
+
+  // Explain the most notable first (solemn / motion de censure), then by date.
+  const priority = (row: (typeof eligible)[number]) =>
+    SIGNIFICANT_CODES.includes(row.s.typeCode ?? "") ? 0 : 1;
+  todo.sort(
+    (a, b) => priority(a) - priority(b) || (b.s.date ?? "").localeCompare(a.s.date ?? ""),
+  );
 
   log(`${eligible.length} eligible scrutins, ${todo.length} need enrichment`);
   if (limit > 0) todo = todo.slice(0, limit);
 
-  // Pre-build the grounded input for each scrutin (also used for the hash).
-  const inputs = new Map<string, ScrutinInput>(
-    todo.map((row) => [
-      row.s.id,
-      {
-        titre: row.s.titre,
-        objet: row.s.objet,
-        dossierTitre: row.dTitre,
-        dossierType: row.dType,
-      },
-    ]),
-  );
-
   let done = 0;
-  const batches = chunk(todo, EXPLAIN_BATCH);
-  for (const batch of batches) {
-    const items: ScrutinBatchItem[] = batch.map((row) => ({
-      id: row.s.id,
-      ...inputs.get(row.s.id)!,
-    }));
-    let map: Map<string, { explanation: string; summary: string }>;
+  for (const row of todo) {
+    let result;
     try {
-      map = await callWithBackoff(() => explainScrutinsBatch(items));
+      result = await callWithBackoff(() => explainScrutinGrounded(inputOf(row)));
     } catch (err) {
       if (isRateLimited(err)) {
         log(`  daily quota reached — stopping explanations (resumes next run)`);
         break;
       }
-      log(`  batch failed: ${(err as Error)?.message ?? err}`);
+      log(`  scrutin ${row.s.id} failed: ${(err as Error)?.message ?? err}`);
       continue;
     }
 
-    for (const row of batch) {
-      const r = map.get(row.s.id);
-      if (!r) continue;
-      const sourceHash = hashSource(
-        WRITING_MODEL,
-        explanationSource(inputs.get(row.s.id)!),
-      );
-      await db
-        .insert(schema.scrutinAi)
-        .values({
-          scrutinId: row.s.id,
-          explanation: r.explanation,
-          summary: r.summary,
-          model: WRITING_MODEL,
-          sourceHash,
-          generatedAt: sql`CURRENT_TIMESTAMP`,
-        })
-        .onConflictDoUpdate({
-          target: schema.scrutinAi.scrutinId,
-          set: {
-            explanation: r.explanation,
-            summary: r.summary,
-            model: WRITING_MODEL,
-            sourceHash,
-            generatedAt: sql`CURRENT_TIMESTAMP`,
-          },
-        });
-      done++;
+    const set = {
+      explanation: result.explanation,
+      summary: result.summary,
+      sources: JSON.stringify(result.sources),
+      model: WRITING_MODEL,
+      sourceHash: hashOf(row),
+      generatedAt: sql`CURRENT_TIMESTAMP`,
+    };
+    await db
+      .insert(schema.scrutinAi)
+      .values({ scrutinId: row.s.id, ...set })
+      .onConflictDoUpdate({ target: schema.scrutinAi.scrutinId, set });
+
+    if (++done % 5 === 0 || done === todo.length) {
+      log(`  explained ${done}/${todo.length} scrutins`);
     }
-    log(`  explained ${done}/${todo.length} scrutins`);
     await sleep(DELAY_MS);
   }
   return done;
