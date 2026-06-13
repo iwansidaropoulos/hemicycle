@@ -14,13 +14,17 @@ import { THEMES } from "@/lib/themes";
 export function ScrutinFilters() {
   const router = useRouter();
   const params = useSearchParams();
-  const [q, setQ] = useState(params.get("q") ?? "");
+  const urlQ = params.get("q") ?? "";
   const theme = params.get("theme") ?? "";
+  const [q, setQ] = useState(urlQ);
 
-  // Keep local input in sync if the URL changes externally (e.g. back button).
-  useEffect(() => {
-    setQ(params.get("q") ?? "");
-  }, [params]);
+  // Keep the input in sync if the URL changes externally (e.g. back button),
+  // using the "adjust state during render" pattern (no effect needed).
+  const [lastUrlQ, setLastUrlQ] = useState(urlQ);
+  if (urlQ !== lastUrlQ) {
+    setLastUrlQ(urlQ);
+    setQ(urlQ);
+  }
 
   function pushParams(next: { q?: string; theme?: string }) {
     const sp = new URLSearchParams(params.toString());
