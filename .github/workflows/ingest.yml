@@ -36,6 +36,9 @@ jobs:
     env:
       TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
       TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      # Throttle to stay within the Gemini free-tier per-minute limit.
+      AI_DELAY_MS: "5000"
     steps:
       - uses: actions/checkout@v4
 
@@ -53,11 +56,17 @@ jobs:
       - name: Run ingestion
         run: npm run ingest
 
+      # AI enrichment (Gemini free tier). Incremental and resumable: it stops
+      # cleanly when the daily/per-minute quota is reached and continues on the
+      # next run, so the backfill converges over several days at zero cost.
+      - name: Run AI enrichment
+        run: npm run enrich
+
       - name: Commit run state
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/last-run.json
+          git add data/last-run.json data/last-enrich.json
           if git diff --staged --quiet; then
             echo "No state change to commit."
             exit 0

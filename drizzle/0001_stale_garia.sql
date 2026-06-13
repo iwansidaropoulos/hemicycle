@@ -1,0 +1,1 @@
+ALTER TABLE `dossiers` ADD `themes_tagged_at` text;

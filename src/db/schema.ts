@@ -42,6 +42,10 @@ export const dossiers = sqliteTable("dossiers", {
   type: text("type"),
   // Canonical page on the official Assemblée nationale website.
   url: text("url"),
+  // Set once the AI theme tagging has run for this dossier (even if it yielded
+  // no themes). Lets the enrichment step skip already-processed dossiers
+  // without re-paying. Preserved across ingests (not in the upsert SET clause).
+  themesTaggedAt: text("themes_tagged_at"),
 });
 
 /** A sitting (séance). One AI session summary is shared by all its scrutins. */
