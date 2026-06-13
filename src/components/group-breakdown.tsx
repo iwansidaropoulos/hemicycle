@@ -31,7 +31,7 @@ export function GroupBreakdown({
   votesByGroup: Map<string, SeatVote[]>;
 }) {
   return (
-    <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white">
+    <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
       {results.map(({ group, result }) => {
         const { participation } = groupStance(result);
         const total = result.pour + result.contre + result.abstention + result.nonVotant;
@@ -40,10 +40,10 @@ export function GroupBreakdown({
           <details key={result.groupId} className="group p-4">
             <summary className="flex cursor-pointer list-none items-center gap-3">
               <GroupDot couleur={group?.couleur ?? null} />
-              <span className="w-28 shrink-0 truncate text-sm font-medium text-zinc-800">
+              <span className="w-28 shrink-0 truncate text-sm font-medium text-zinc-800 dark:text-zinc-200">
                 {group?.abrege ?? group?.libelle ?? result.groupId}
               </span>
-              <span className="flex h-3 flex-1 overflow-hidden rounded-full bg-zinc-100">
+              <span className="flex h-3 flex-1 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                 {SEGMENTS.map((seg) => {
                   const v = result[seg.key];
                   if (!v || total === 0) return null;
@@ -56,7 +56,7 @@ export function GroupBreakdown({
                   );
                 })}
               </span>
-              <span className="w-32 shrink-0 text-right text-xs text-zinc-500">
+              <span className="w-32 shrink-0 text-right text-xs text-zinc-500 dark:text-zinc-400">
                 {result.pour}/{result.contre}/{result.abstention} ·{" "}
                 {formatPercent(participation)}
               </span>
@@ -69,10 +69,10 @@ export function GroupBreakdown({
                   if (list.length === 0) return null;
                   return (
                     <div key={pos}>
-                      <p className="font-medium text-zinc-600">
+                      <p className="font-medium text-zinc-600 dark:text-zinc-300">
                         {label} ({list.length})
                       </p>
-                      <p className="text-zinc-500">
+                      <p className="text-zinc-500 dark:text-zinc-400">
                         {list
                           .map((d) => `${d.prenom} ${d.nom}`.trim())
                           .filter(Boolean)

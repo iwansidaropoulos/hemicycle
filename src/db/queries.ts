@@ -83,10 +83,25 @@ export async function getGroupById(id: string) {
  * Scrutins seen from one group's perspective: the group's majority position and
  * participation rate on each, most recent first.
  */
+export type GroupSort = "participation" | "date";
+
 export async function listScrutinsForGroup(
   groupId: string,
-  { limit = PAGE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {},
+  {
+    limit = PAGE_SIZE,
+    offset = 0,
+    sort = "participation",
+  }: { limit?: number; offset?: number; sort?: GroupSort } = {},
 ) {
+  // Participation rate of this group on the scrutin = expressed / headcount.
+  const participation = sql`
+    cast(${scrutinGroupResults.pour} + ${scrutinGroupResults.contre} + ${scrutinGroupResults.abstention} as real)
+    / nullif(${scrutinGroupResults.effectif}, 0)`;
+  const orderBy =
+    sort === "date"
+      ? [desc(scrutins.date), desc(scrutins.numero)]
+      : [desc(participation), desc(scrutins.date)];
+
   const [rows, totalRow] = await Promise.all([
     db
       .select({
@@ -96,7 +111,7 @@ export async function listScrutinsForGroup(
       .from(scrutinGroupResults)
       .innerJoin(scrutins, eq(scrutins.id, scrutinGroupResults.scrutinId))
       .where(eq(scrutinGroupResults.groupId, groupId))
-      .orderBy(desc(scrutins.date), desc(scrutins.numero))
+      .orderBy(...orderBy)
       .limit(limit)
       .offset(offset),
     db

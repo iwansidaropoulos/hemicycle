@@ -1,7 +1,7 @@
 import Link from "next/link";
 
 import { getEnrichmentProgress, getRecentlyExplained } from "@/db/queries";
-import { formatDate } from "@/lib/format";
+import { capitalizeFirst, formatDate } from "@/lib/format";
 import { fr } from "@/lib/i18n";
 
 export const metadata = { title: `Avancement — ${fr.appName}` };
@@ -27,15 +27,15 @@ function Bar({
   return (
     <div className="space-y-1">
       <div className="flex items-baseline justify-between text-sm">
-        <span className="font-medium text-zinc-800">{label}</span>
-        <span className="text-zinc-500">
+        <span className="font-medium text-zinc-800 dark:text-zinc-200">{label}</span>
+        <span className="text-zinc-500 dark:text-zinc-400">
           {done.toLocaleString("fr-FR")} / {total.toLocaleString("fr-FR")} ({p} %)
         </span>
       </div>
-      <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-200">
+      <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800">
         <div className="h-full rounded-full bg-indigo-500" style={{ width: `${p}%` }} />
       </div>
-      {note && <p className="text-xs text-zinc-400">{note}</p>}
+      {note && <p className="text-xs text-zinc-400 dark:text-zinc-500">{note}</p>}
     </div>
   );
 }
@@ -100,17 +100,17 @@ export default async function StatutPage({
         {recent.length === 0 ? (
           <p className="text-sm text-zinc-400">Aucun pour l’instant.</p>
         ) : (
-          <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white text-sm">
+          <ul className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white text-sm dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
             {recent.map(({ scrutin }) => (
               <li key={scrutin.id}>
                 <Link
                   href={`/scrutins/${scrutin.id}`}
-                  className="flex items-baseline gap-3 px-4 py-2 hover:bg-zinc-50"
+                  className="flex items-baseline gap-3 px-4 py-2 hover:bg-zinc-50 dark:hover:bg-zinc-800"
                 >
-                  <span className="text-xs text-zinc-400">
+                  <span className="text-xs text-zinc-400 dark:text-zinc-500">
                     {formatDate(scrutin.date)}
                   </span>
-                  <span className="truncate text-zinc-700">{scrutin.titre}</span>
+                  <span className="truncate text-zinc-700 dark:text-zinc-300">{capitalizeFirst(scrutin.titre)}</span>
                 </Link>
               </li>
             ))}

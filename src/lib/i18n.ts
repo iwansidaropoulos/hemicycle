@@ -18,6 +18,7 @@ export const fr = {
     intro:
       "Parcourez les scrutins publics de l'Assemblée nationale : par date, par thème ou par groupe parlementaire.",
     comingSoon: "Les premières données arriveront bientôt.",
+    browseScrutins: "Parcourir les scrutins",
   },
   footer: {
     dataSource: "Données : Assemblée nationale (Open Data)",
@@ -58,6 +59,10 @@ export const fr = {
     absent: "N'a pas pris part",
     mixed: "Vote partagé",
     seeVotes: "Voir les votes du groupe",
+    officialPage: "Page sur le site de l'Assemblée",
+    sortBy: "Trier par",
+    sortParticipation: "Participation",
+    sortDate: "Date",
   },
   themes: {
     title: "Thèmes",

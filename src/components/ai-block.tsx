@@ -13,19 +13,19 @@ export function AiBlock({
   content: string | null | undefined;
 }) {
   return (
-    <section className="rounded-lg border border-zinc-200 bg-white p-4">
+    <section className="rounded-lg border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <div className="mb-2 flex items-center gap-2">
-        <h2 className="text-sm font-semibold text-zinc-800">{title}</h2>
-        <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-700">
+        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">{title}</h2>
+        <span className="inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-violet-700 dark:bg-violet-950 dark:text-violet-300">
           {fr.ai.badge}
         </span>
       </div>
       {content ? (
-        <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700">
+        <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
           {content}
         </p>
       ) : (
-        <p className="text-sm italic text-zinc-400">{fr.ai.notYet}</p>
+        <p className="text-sm italic text-zinc-400 dark:text-zinc-500">{fr.ai.notYet}</p>
       )}
     </section>
   );

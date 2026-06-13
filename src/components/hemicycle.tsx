@@ -119,7 +119,7 @@ export function Hemicycle({ groups }: { groups: HemicycleGroup[] }) {
           <circle key={i} cx={s.x} cy={s.y} r={seatRadius} fill={s.color} />
         ))}
       </svg>
-      <figcaption className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600">
+      <figcaption className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-600 dark:text-zinc-400">
         {(
           [
             ["pour", fr.positions.pour],

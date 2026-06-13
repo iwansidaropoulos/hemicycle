@@ -15,7 +15,7 @@ import {
   getSessionAi,
   type SeatVote,
 } from "@/db/queries";
-import { formatDate } from "@/lib/format";
+import { capitalizeFirst, formatDate } from "@/lib/format";
 import { fr } from "@/lib/i18n";
 import { themeLabel } from "@/lib/themes";
 
@@ -74,7 +74,7 @@ export default async function ScrutinDetailPage({
 
   return (
     <article className="space-y-6">
-      <Link href="/scrutins" className="text-sm text-zinc-500 hover:underline">
+      <Link href="/scrutins" className="text-sm text-zinc-500 hover:underline dark:text-zinc-400">
         {fr.detail.backToList}
       </Link>
 
@@ -87,7 +87,7 @@ export default async function ScrutinDetailPage({
           <ResultBadge result={scrutin.resultat} />
         </div>
         <h1 className="text-xl font-semibold leading-snug tracking-tight">
-          {scrutin.titre}
+          {capitalizeFirst(scrutin.titre)}
         </h1>
 
         {themes.length > 0 && (
@@ -96,7 +96,7 @@ export default async function ScrutinDetailPage({
               <Link
                 key={t}
                 href={`/themes/${t}`}
-                className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs text-zinc-700 hover:bg-zinc-200"
+                className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
               >
                 {themeLabel(t)}
               </Link>
@@ -109,7 +109,7 @@ export default async function ScrutinDetailPage({
             href={scrutin.url ?? "#"}
             target="_blank"
             rel="noreferrer"
-            className="text-blue-700 hover:underline"
+            className="text-blue-700 hover:underline dark:text-blue-400"
           >
             {fr.detail.officialLink}
           </a>
@@ -118,7 +118,7 @@ export default async function ScrutinDetailPage({
               href={dossier.url}
               target="_blank"
               rel="noreferrer"
-              className="text-blue-700 hover:underline"
+              className="text-blue-700 hover:underline dark:text-blue-400"
             >
               {fr.detail.dossier}
             </a>
@@ -130,18 +130,18 @@ export default async function ScrutinDetailPage({
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {(
           [
-            [fr.positions.pour, scrutin.countPour, "text-emerald-700"],
-            [fr.positions.contre, scrutin.countContre, "text-rose-700"],
-            [fr.positions.abstention, scrutin.countAbstention, "text-zinc-700"],
-            [fr.scrutins.votants, votants, "text-zinc-500"],
+            [fr.positions.pour, scrutin.countPour, "text-emerald-700 dark:text-emerald-400"],
+            [fr.positions.contre, scrutin.countContre, "text-rose-700 dark:text-rose-400"],
+            [fr.positions.abstention, scrutin.countAbstention, "text-zinc-700 dark:text-zinc-300"],
+            [fr.scrutins.votants, votants, "text-zinc-500 dark:text-zinc-400"],
           ] as const
         ).map(([label, value, cls]) => (
           <div
             key={label}
-            className="rounded-lg border border-zinc-200 bg-white p-3 text-center"
+            className="rounded-lg border border-zinc-200 bg-white p-3 text-center dark:border-zinc-800 dark:bg-zinc-900"
           >
             <div className={`text-2xl font-semibold ${cls}`}>{value}</div>
-            <div className="text-xs text-zinc-500">{label}</div>
+            <div className="text-xs text-zinc-500 dark:text-zinc-400">{label}</div>
           </div>
         ))}
       </section>
@@ -150,7 +150,7 @@ export default async function ScrutinDetailPage({
 
       {/* Hemicycle */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-zinc-800">
+        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
           {fr.detail.hemicycle}
         </h2>
         <Hemicycle groups={hemicycleGroups} />
@@ -158,7 +158,7 @@ export default async function ScrutinDetailPage({
 
       {/* Per-group breakdown */}
       <section className="space-y-2">
-        <h2 className="text-sm font-semibold text-zinc-800">
+        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">
           {fr.detail.byGroup}
         </h2>
         <GroupBreakdown results={ordered} votesByGroup={votesByGroup} />

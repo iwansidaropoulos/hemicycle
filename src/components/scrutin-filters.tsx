@@ -52,12 +52,12 @@ export function ScrutinFilters() {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder={fr.scrutins.searchPlaceholder}
-        className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500"
+        className="flex-1 rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
       />
       <select
         value={theme}
         onChange={(e) => pushParams({ q, theme: e.target.value })}
-        className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500"
+        className="rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
       >
         <option value="">{fr.scrutins.allThemes}</option>
         {THEMES.map((t) => (

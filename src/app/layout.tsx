@@ -10,14 +10,20 @@ export const metadata: Metadata = {
   description: fr.home.intro,
 };
 
+// Applied before paint to avoid a light/dark flash on first load.
+const themeInit = `(function(){try{var t=localStorage.getItem('theme');var d=t?t==='dark':window.matchMedia('(prefers-color-scheme: dark)').matches;if(d)document.documentElement.classList.add('dark');}catch(e){}})();`;
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="fr" className="h-full antialiased">
-      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900">
+    <html lang="fr" className="h-full antialiased" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeInit }} />
+      </head>
+      <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
         <SiteHeader />
         <main className="flex-1 w-full max-w-5xl mx-auto px-4 py-8">
           {children}

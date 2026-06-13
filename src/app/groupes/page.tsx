@@ -20,14 +20,14 @@ export default async function GroupsPage() {
           <Link
             key={g.id}
             href={`/groupes/${g.id}`}
-            className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-4 transition hover:border-zinc-300 hover:shadow-sm"
+            className="flex items-center gap-3 rounded-lg border border-zinc-200 bg-white p-4 transition hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700"
           >
             <GroupDot couleur={g.couleur} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-zinc-900">
+              <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
                 {g.libelle}
               </p>
-              <p className="text-xs text-zinc-500">
+              <p className="text-xs text-zinc-500 dark:text-zinc-400">
                 {g.abrege ? `${g.abrege} · ` : ""}
                 {g.effectif} {fr.groups.members}
               </p>

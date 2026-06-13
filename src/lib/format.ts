@@ -46,3 +46,13 @@ export function groupStance(t: GroupTally): {
 export function formatPercent(ratio: number): string {
   return `${Math.round(ratio * 100)} %`;
 }
+
+/**
+ * Capitalize the first letter of a scrutin title. The Assemblée nationale
+ * stores titles lowercased (e.g. "l'ensemble du projet de loi…"); we keep that
+ * phrasing but capitalize the first visible letter ("L'ensemble du projet…").
+ */
+export function capitalizeFirst(text: string): string {
+  if (!text) return text;
+  return text.charAt(0).toLocaleUpperCase("fr-FR") + text.slice(1);
+}

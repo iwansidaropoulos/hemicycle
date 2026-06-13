@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Class-based dark mode: `dark:` utilities apply when <html> has the `dark` class. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme inline {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
     Helvetica, Arial, sans-serif;
