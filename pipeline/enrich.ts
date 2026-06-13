@@ -15,22 +15,23 @@
  * ingest. Generating them from the data we have would violate the grounding
  * rule, so they are left for a later iteration.
  *
- * Run with: `npm run enrich`  (env: ANTHROPIC_API_KEY; optional AI_LIMIT, ENRICH_ONLY)
+ * Run with: `npm run enrich`  (env: GEMINI_API_KEY; optional AI_LIMIT, ENRICH_ONLY)
  */
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { dirname, resolve } from "node:path";
 
-import { eq, inArray, or, sql } from "drizzle-orm";
+import { eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { sleep } from "./lib/util";
+import { chunk, sleep } from "./lib/util";
 import { TAGGING_MODEL, WRITING_MODEL, isRateLimited } from "./ai/client";
-import { tagDossierThemes } from "./ai/tag-themes";
+import { tagDossiersBatch } from "./ai/tag-themes";
 import {
-  explainScrutin,
+  explainScrutinsBatch,
   explanationSource,
+  type ScrutinBatchItem,
   type ScrutinInput,
 } from "./ai/explain-scrutin";
 
@@ -39,8 +40,12 @@ const STATE_FILE = resolve(process.cwd(), "data/last-enrich.json");
 // Vote-type codes whose scrutins are significant enough for costly enrichment.
 const SIGNIFICANT_CODES = ["SPS", "MOC"];
 
-// Delay between calls to stay within the free-tier per-minute rate limit.
-const DELAY_MS = Number(process.env.AI_DELAY_MS) || 1200;
+// Delay between requests (the free tier caps requests/day, not per-second).
+const DELAY_MS = Number(process.env.AI_DELAY_MS) || 1500;
+// Items per request — batching keeps the backfill within the free-tier
+// daily request quota (~20 requests/day per model).
+const TAG_BATCH = Number(process.env.TAG_BATCH) || 40;
+const EXPLAIN_BATCH = Number(process.env.EXPLAIN_BATCH) || 10;
 
 function log(msg: string) {
   console.log(`[enrich] ${msg}`);
@@ -78,37 +83,53 @@ async function tagThemes(limit: number): Promise<{ dossiers: number; themes: num
     .from(schema.dossiers)
     .where(sql`${schema.dossiers.themesTaggedAt} IS NULL`);
 
-  log(`${pending.length} dossiers to tag`);
+  // Prioritize dossiers actually referenced by scrutins: only those make the
+  // theme filter useful (scrutins inherit their dossier's themes). The many
+  // dossiers with no scrutin — reports, studies — are tagged afterwards.
+  const linked = new Set(
+    (
+      await db
+        .selectDistinct({ id: schema.scrutins.dossierId })
+        .from(schema.scrutins)
+        .where(isNotNull(schema.scrutins.dossierId))
+    ).map((r) => r.id),
+  );
+  pending.sort((a, b) => Number(linked.has(b.id)) - Number(linked.has(a.id)));
+
+  log(`${pending.length} dossiers to tag (${linked.size} referenced by scrutins, tagged first)`);
   if (limit > 0) pending = pending.slice(0, limit);
 
   let themeCount = 0;
   let done = 0;
-  for (const d of pending) {
+  const batches = chunk(pending, TAG_BATCH);
+  for (const batch of batches) {
+    let map: Map<string, string[]>;
     try {
-      const themes = await callWithBackoff(() =>
-        tagDossierThemes({ titre: d.titre, type: d.type }),
-      );
-      if (themes.length > 0) {
-        await db
-          .insert(schema.dossierThemes)
-          .values(themes.map((theme) => ({ dossierId: d.id, theme })))
-          .onConflictDoNothing();
-        themeCount += themes.length;
-      }
-      // Mark as processed regardless of how many themes were found.
-      await db
-        .update(schema.dossiers)
-        .set({ themesTaggedAt: sql`CURRENT_TIMESTAMP` })
-        .where(eq(schema.dossiers.id, d.id));
+      map = await callWithBackoff(() => tagDossiersBatch(batch));
     } catch (err) {
       if (isRateLimited(err)) {
         log(`  daily quota reached — stopping tagging (resumes next run)`);
         break;
       }
-      log(`  dossier ${d.id} failed: ${(err as Error)?.message ?? err}`);
+      log(`  batch failed: ${(err as Error)?.message ?? err}`);
       continue;
     }
-    if (++done % 50 === 0) log(`  tagged ${done}/${pending.length}`);
+
+    // Insert all themes for the batch in one statement, then mark the dossiers.
+    const rows = batch.flatMap((d) =>
+      (map.get(d.id) ?? []).map((theme) => ({ dossierId: d.id, theme })),
+    );
+    if (rows.length > 0) {
+      await db.insert(schema.dossierThemes).values(rows).onConflictDoNothing();
+      themeCount += rows.length;
+    }
+    await db
+      .update(schema.dossiers)
+      .set({ themesTaggedAt: sql`CURRENT_TIMESTAMP` })
+      .where(inArray(schema.dossiers.id, batch.map((d) => d.id)));
+
+    done += batch.length;
+    log(`  tagged ${done}/${pending.length} dossiers (+${themeCount} themes)`);
     await sleep(DELAY_MS);
   }
   return { dossiers: done, themes: themeCount };
@@ -149,25 +170,51 @@ async function explainScrutins(limit: number): Promise<number> {
   log(`${eligible.length} eligible scrutins, ${todo.length} need enrichment`);
   if (limit > 0) todo = todo.slice(0, limit);
 
+  // Pre-build the grounded input for each scrutin (also used for the hash).
+  const inputs = new Map<string, ScrutinInput>(
+    todo.map((row) => [
+      row.s.id,
+      {
+        titre: row.s.titre,
+        objet: row.s.objet,
+        dossierTitre: row.dTitre,
+        dossierType: row.dType,
+      },
+    ]),
+  );
+
   let done = 0;
-  for (const row of todo) {
-    const input: ScrutinInput = {
-      titre: row.s.titre,
-      objet: row.s.objet,
-      dossierTitre: row.dTitre,
-      dossierType: row.dType,
-    };
+  const batches = chunk(todo, EXPLAIN_BATCH);
+  for (const batch of batches) {
+    const items: ScrutinBatchItem[] = batch.map((row) => ({
+      id: row.s.id,
+      ...inputs.get(row.s.id)!,
+    }));
+    let map: Map<string, { explanation: string; summary: string }>;
     try {
-      const { explanation, summary } = await callWithBackoff(() =>
-        explainScrutin(input),
+      map = await callWithBackoff(() => explainScrutinsBatch(items));
+    } catch (err) {
+      if (isRateLimited(err)) {
+        log(`  daily quota reached — stopping explanations (resumes next run)`);
+        break;
+      }
+      log(`  batch failed: ${(err as Error)?.message ?? err}`);
+      continue;
+    }
+
+    for (const row of batch) {
+      const r = map.get(row.s.id);
+      if (!r) continue;
+      const sourceHash = hashSource(
+        WRITING_MODEL,
+        explanationSource(inputs.get(row.s.id)!),
       );
-      const sourceHash = hashSource(WRITING_MODEL, explanationSource(input));
       await db
         .insert(schema.scrutinAi)
         .values({
           scrutinId: row.s.id,
-          explanation,
-          summary,
+          explanation: r.explanation,
+          summary: r.summary,
           model: WRITING_MODEL,
           sourceHash,
           generatedAt: sql`CURRENT_TIMESTAMP`,
@@ -175,22 +222,16 @@ async function explainScrutins(limit: number): Promise<number> {
         .onConflictDoUpdate({
           target: schema.scrutinAi.scrutinId,
           set: {
-            explanation,
-            summary,
+            explanation: r.explanation,
+            summary: r.summary,
             model: WRITING_MODEL,
             sourceHash,
             generatedAt: sql`CURRENT_TIMESTAMP`,
           },
         });
-    } catch (err) {
-      if (isRateLimited(err)) {
-        log(`  daily quota reached — stopping explanations (resumes next run)`);
-        break;
-      }
-      log(`  scrutin ${row.s.id} failed: ${(err as Error)?.message ?? err}`);
-      continue;
+      done++;
     }
-    if (++done % 10 === 0) log(`  explained ${done}/${todo.length}`);
+    log(`  explained ${done}/${todo.length} scrutins`);
     await sleep(DELAY_MS);
   }
   return done;

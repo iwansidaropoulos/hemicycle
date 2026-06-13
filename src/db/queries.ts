@@ -3,7 +3,7 @@
  * function here is a fast Turso read — no LLM calls, no heavy work (brief §2).
  */
 
-import { and, desc, eq, inArray, like, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
 
 import { db } from "./client";
 import {
@@ -191,6 +191,52 @@ export async function getSessionAi(sessionId: string) {
     .where(eq(sessionAi.sessionId, sessionId))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/** Enrichment progress for the admin status page. */
+export async function getEnrichmentProgress() {
+  const [scrutinsTotal, scrutinsEligible, scrutinsExplained, dossiersTotal, dossiersTagged, scrutinsWithTheme] =
+    await Promise.all([
+      db.select({ n: sql<number>`count(*)` }).from(scrutins),
+      db
+        .select({ n: sql<number>`count(*)` })
+        .from(scrutins)
+        .where(
+          or(
+            inArray(scrutins.typeCode, ["SPS", "MOC"]),
+            eq(scrutins.isFinal, true),
+          ),
+        ),
+      db.select({ n: sql<number>`count(*)` }).from(scrutinAi),
+      db.select({ n: sql<number>`count(*)` }).from(dossiers),
+      db
+        .select({ n: sql<number>`count(*)` })
+        .from(dossiers)
+        .where(sql`${dossiers.themesTaggedAt} IS NOT NULL`),
+      db
+        .select({ n: sql<number>`count(distinct ${scrutins.id})` })
+        .from(scrutins)
+        .innerJoin(dossierThemes, eq(dossierThemes.dossierId, scrutins.dossierId)),
+    ]);
+
+  return {
+    scrutinsTotal: Number(scrutinsTotal[0]?.n ?? 0),
+    scrutinsEligible: Number(scrutinsEligible[0]?.n ?? 0),
+    scrutinsExplained: Number(scrutinsExplained[0]?.n ?? 0),
+    dossiersTotal: Number(dossiersTotal[0]?.n ?? 0),
+    dossiersTagged: Number(dossiersTagged[0]?.n ?? 0),
+    scrutinsWithTheme: Number(scrutinsWithTheme[0]?.n ?? 0),
+  };
+}
+
+/** Most recently AI-explained scrutins (for the status page). */
+export async function getRecentlyExplained(limit = 15) {
+  return db
+    .select({ scrutin: scrutins, generatedAt: scrutinAi.generatedAt })
+    .from(scrutinAi)
+    .innerJoin(scrutins, eq(scrutins.id, scrutinAi.scrutinId))
+    .orderBy(desc(scrutinAi.generatedAt))
+    .limit(limit);
 }
 
 /** Theme ids attached to a scrutin's dossier. */
