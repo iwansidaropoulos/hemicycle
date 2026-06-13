@@ -60,7 +60,17 @@ jobs:
           git add data/last-run.json
           if git diff --staged --quiet; then
             echo "No state change to commit."
-          else
-            git commit -m "chore: update ingestion state [skip ci]"
-            git push
+            exit 0
           fi
+          git commit -m "chore: update ingestion state [skip ci]"
+          # Rebase-retry so a concurrent push to main (e.g. an app deploy) does
+          # not fail this step — the ingestion itself has already succeeded.
+          for attempt in 1 2 3 4 5; do
+            if git push origin HEAD:main; then
+              echo "State pushed."
+              exit 0
+            fi
+            echo "Push rejected; rebasing onto latest main (attempt $attempt)..."
+            git pull --rebase --autostash origin main || true
+          done
+          echo "::warning::Could not push run state after retries (ingestion still succeeded)."

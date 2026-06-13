@@ -31,21 +31,38 @@ export interface ArchiveEntry<T = unknown> {
 /**
  * Download an archive and return its `.json` entries, parsed. `filter` lets the
  * caller keep only the paths it cares about (e.g. a given subfolder).
+ *
+ * Suitable for the small archives. For the very large scrutins archive, prefer
+ * `downloadAndIterate` so parsed objects are not all retained at once.
  */
 export async function downloadJsonArchive<T = unknown>(
   url: string,
   filter?: (path: string) => boolean,
 ): Promise<ArchiveEntry<T>[]> {
+  const entries: ArchiveEntry<T>[] = [];
+  await downloadAndIterate<T>(url, (path, data) => {
+    entries.push({ path, data });
+  }, filter);
+  return entries;
+}
+
+/**
+ * Download an archive, unzip it, and invoke `onEntry` for each parsed `.json`
+ * file in turn. Parsed objects are not retained by this function, so the caller
+ * controls peak memory (important for the million-row scrutins archive).
+ */
+export async function downloadAndIterate<T = unknown>(
+  url: string,
+  onEntry: (path: string, data: T) => void,
+  filter?: (path: string) => boolean,
+): Promise<void> {
   const bytes = await download(url);
   const files = unzipSync(bytes);
   const decoder = new TextDecoder("utf-8");
-  const entries: ArchiveEntry<T>[] = [];
-
   for (const [path, content] of Object.entries(files)) {
     if (!path.endsWith(".json")) continue;
     if (filter && !filter(path)) continue;
     if (content.length === 0) continue;
-    entries.push({ path, data: JSON.parse(decoder.decode(content)) as T });
+    onEntry(path, JSON.parse(decoder.decode(content)) as T);
   }
-  return entries;
 }

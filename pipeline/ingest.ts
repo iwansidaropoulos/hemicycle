@@ -20,30 +20,40 @@ import { sql } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import { DATASETS } from "./config";
-import { downloadJsonArchive } from "./lib/archive";
-import { chunk } from "./lib/util";
+import { downloadAndIterate, downloadJsonArchive } from "./lib/archive";
+import { chunk, withRetry } from "./lib/util";
 import { parseGroups, type ParsedGroup, type RawOrgane } from "./parse/groups";
 import { parseDeputies, type RawActeur } from "./parse/deputies";
 import { parseDossiers, type RawDossier } from "./parse/dossiers";
 import { parseScrutin, type RawScrutinFile } from "./parse/scrutins";
 
 const STATE_FILE = resolve(process.cwd(), "data/last-run.json");
-// Conservative row-per-statement caps (well under SQLite's variable limit).
+// Conservative row-per-statement cap (well under SQLite's variable limit).
 const BATCH = 800;
+// Scrutins processed (and committed) per flush, so the backfill is resumable.
+const BATCH_SCRUTINS = 250;
 
 function log(msg: string) {
   console.log(`[ingest] ${msg}`);
 }
 
-/** Insert rows in chunks, skipping rows that conflict on the primary key. */
+/**
+ * Insert rows in chunks, skipping rows that conflict on the primary key. Each
+ * chunk is retried with backoff so a transient libSQL/network error during the
+ * large backfill does not abort the whole run.
+ */
 async function insertChunked<T extends Record<string, unknown>>(
   table: Parameters<typeof db.insert>[0],
   rows: T[],
+  label = "insert",
 ): Promise<number> {
   if (rows.length === 0) return 0;
   for (const part of chunk(rows, BATCH)) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await db.insert(table).values(part as any).onConflictDoNothing();
+    await withRetry(
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      () => db.insert(table).values(part as any).onConflictDoNothing(),
+      { label },
+    );
   }
   return rows.length;
 }
@@ -52,24 +62,22 @@ async function main() {
   const startedAt = new Date();
   log(`starting at ${startedAt.toISOString()}`);
 
-  // --- 1. Download all three archives in parallel. ----------------------
-  log("downloading archives...");
-  const [organeEntries, acteurEntries, dossierEntries, scrutinEntries] =
-    await Promise.all([
-      downloadJsonArchive<RawOrgane>(DATASETS.acteurs, (p) =>
-        p.includes("/organe/"),
-      ),
-      downloadJsonArchive<RawActeur>(DATASETS.acteurs, (p) =>
-        p.includes("/acteur/"),
-      ),
-      downloadJsonArchive<RawDossier>(DATASETS.dossiers, (p) =>
-        p.includes("/dossierParlementaire/"),
-      ),
-      downloadJsonArchive<RawScrutinFile>(DATASETS.scrutins),
-    ]);
+  // --- 1. Download the (small) reference archives in parallel. ----------
+  log("downloading reference archives...");
+  const [organeEntries, acteurEntries, dossierEntries] = await Promise.all([
+    downloadJsonArchive<RawOrgane>(DATASETS.acteurs, (p) =>
+      p.includes("/organe/"),
+    ),
+    downloadJsonArchive<RawActeur>(DATASETS.acteurs, (p) =>
+      p.includes("/acteur/"),
+    ),
+    downloadJsonArchive<RawDossier>(DATASETS.dossiers, (p) =>
+      p.includes("/dossierParlementaire/"),
+    ),
+  ]);
   log(
     `downloaded: ${organeEntries.length} organes, ${acteurEntries.length} acteurs, ` +
-      `${dossierEntries.length} dossiers, ${scrutinEntries.length} scrutins`,
+      `${dossierEntries.length} dossiers`,
   );
 
   // --- 2. Parse reference data. ----------------------------------------
@@ -93,45 +101,78 @@ async function main() {
   await upsertDeputies(deputies);
   await upsertDossiers(dossiers);
 
-  // --- 4. Incremental scrutins. ----------------------------------------
-  const existing = new Set(
-    (await db.select({ id: schema.scrutins.id }).from(schema.scrutins)).map(
-      (r) => r.id,
-    ),
+  // --- 4. Incremental, resumable scrutins. -----------------------------
+  // A scrutin is considered fully ingested once it has per-group results, which
+  // are written LAST in each batch (after the scrutin row and its votes). So
+  // this "done" set is a correct resume marker even if a previous run crashed
+  // mid-backfill: any unfinished scrutin is simply reprocessed.
+  const doneIds = new Set(
+    (
+      await db
+        .selectDistinct({ id: schema.scrutinGroupResults.scrutinId })
+        .from(schema.scrutinGroupResults)
+    ).map((r) => r.id),
   );
-  log(`${existing.size} scrutins already in DB`);
+  log(`${doneIds.size} scrutins already ingested (will be skipped)`);
 
-  const newScrutins: ReturnType<typeof parseScrutin>[] = [];
-  for (const { data } of scrutinEntries) {
-    if (!data?.scrutin?.uid) continue;
-    if (existing.has(data.scrutin.uid)) continue;
-    newScrutins.push(parseScrutin(data));
-  }
-  // Optional cap, for testing the pipeline on a small batch (e.g. INGEST_LIMIT=20).
+  // Stream-parse the large scrutins archive so we don't retain raw JSON for all
+  // ~7400 files at once.
   const limit = Number(process.env.INGEST_LIMIT) || 0;
-  if (limit > 0 && newScrutins.length > limit) {
-    log(`INGEST_LIMIT=${limit} — capping from ${newScrutins.length} new scrutins`);
-    newScrutins.length = limit;
-  }
-  log(`${newScrutins.length} new scrutins to ingest`);
+  const newScrutins: ReturnType<typeof parseScrutin>[] = [];
+  let totalScrutins = 0;
+  await downloadAndIterate<RawScrutinFile>(DATASETS.scrutins, (_path, data) => {
+    totalScrutins++;
+    const uid = data?.scrutin?.uid;
+    if (!uid || doneIds.has(uid)) return;
+    if (limit > 0 && newScrutins.length >= limit) return;
+    newScrutins.push(parseScrutin(data));
+  });
+  log(`${newScrutins.length} new scrutins to ingest (of ${totalScrutins})`);
 
-  // Sessions are shared across scrutins; dedupe by id before inserting.
-  const sessionMap = new Map<string, { id: string; date: string | null }>();
-  const scrutinRows = newScrutins.map((p) => p.scrutin);
-  const groupResultRows = newScrutins.flatMap((p) => p.groupResults);
-  const voteRows = newScrutins.flatMap((p) => p.votes);
-  for (const p of newScrutins) {
-    if (p.session) sessionMap.set(p.session.id, p.session);
-  }
+  let scrutinsInserted = 0;
+  let groupResultsInserted = 0;
+  let votesInserted = 0;
+  let sessionsNew = 0;
+  const sessionSeen = new Set<string>();
 
-  await insertChunked(schema.sessions, [...sessionMap.values()]);
-  // Insert scrutins before their child rows (foreign keys are declarative).
-  const scrutinsInserted = await insertChunked(schema.scrutins, scrutinRows);
-  const groupResultsInserted = await insertChunked(
-    schema.scrutinGroupResults,
-    groupResultRows,
-  );
-  const votesInserted = await insertChunked(schema.votes, voteRows);
+  const batches = chunk(newScrutins, BATCH_SCRUTINS);
+  for (let bi = 0; bi < batches.length; bi++) {
+    const batch = batches[bi];
+
+    const sessions = [];
+    for (const p of batch) {
+      if (p.session && !sessionSeen.has(p.session.id)) {
+        sessionSeen.add(p.session.id);
+        sessions.push(p.session);
+      }
+    }
+    await insertChunked(schema.sessions, sessions, "sessions");
+    sessionsNew += sessions.length;
+
+    // Order matters for resumability: scrutin rows, then votes, then group
+    // results LAST (the done-marker). FK votes.scrutin_id needs the scrutin row.
+    scrutinsInserted += await insertChunked(
+      schema.scrutins,
+      batch.map((p) => p.scrutin),
+      "scrutins",
+    );
+    votesInserted += await insertChunked(
+      schema.votes,
+      batch.flatMap((p) => p.votes),
+      "votes",
+    );
+    groupResultsInserted += await insertChunked(
+      schema.scrutinGroupResults,
+      batch.flatMap((p) => p.groupResults),
+      "group_results",
+    );
+
+    if (bi % 5 === 0 || bi === batches.length - 1) {
+      log(
+        `batch ${bi + 1}/${batches.length} — ${scrutinsInserted} scrutins, ${votesInserted} votes`,
+      );
+    }
+  }
 
   // --- 5. Write committed state file (trace + keeps repo active). -------
   const finishedAt = new Date();
@@ -143,9 +184,9 @@ async function main() {
       groups: groups.length,
       deputies: deputies.length,
       dossiers: dossiers.length,
-      sessionsNew: sessionMap.size,
-      scrutinsTotalAvailable: scrutinEntries.length,
-      scrutinsInDbBefore: existing.size,
+      sessionsNew,
+      scrutinsTotalAvailable: totalScrutins,
+      scrutinsInDbBefore: doneIds.size,
       scrutinsInserted,
       groupResultsInserted,
       votesInserted,

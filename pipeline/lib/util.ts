@@ -28,3 +28,35 @@ export function chunk<T>(items: T[], size: number): T[][] {
   }
   return out;
 }
+
+/** Pause for `ms` milliseconds. */
+export function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
+/**
+ * Run an async operation with retries and exponential backoff. The backfill
+ * writes millions of rows over the network, so a single transient libSQL/HTTP
+ * error must not abort the whole run.
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  { attempts = 5, baseDelayMs = 500, label = "operation" }: { attempts?: number; baseDelayMs?: number; label?: string } = {},
+): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      const wait = baseDelayMs * 2 ** i;
+      console.warn(
+        `[ingest] ${label} failed (attempt ${i + 1}/${attempts}): ${
+          (err as Error)?.message ?? err
+        } — retrying in ${wait}ms`,
+      );
+      await sleep(wait);
+    }
+  }
+  throw lastErr;
+}
