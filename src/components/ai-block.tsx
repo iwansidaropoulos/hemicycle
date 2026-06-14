@@ -1,8 +1,32 @@
+import { Fragment } from "react";
+
 import { fr } from "@/lib/i18n";
 
 export interface AiSource {
   title: string;
   url: string;
+}
+
+/** Render minimal markdown: paragraphs (blank lines) and **bold** spans. */
+function RichText({ text }: { text: string }) {
+  const paragraphs = text.trim().split(/\n{2,}/);
+  return (
+    <div className="space-y-2 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+      {paragraphs.map((para, pi) => (
+        <p key={pi}>
+          {para.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+            part.startsWith("**") && part.endsWith("**") ? (
+              <strong key={i} className="font-semibold text-zinc-900 dark:text-zinc-100">
+                {part.slice(2, -2)}
+              </strong>
+            ) : (
+              <Fragment key={i}>{part}</Fragment>
+            ),
+          )}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 /**
@@ -29,9 +53,7 @@ export function AiBlock({
         </span>
       </div>
       {content ? (
-        <p className="whitespace-pre-line text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
-          {content}
-        </p>
+        <RichText text={content} />
       ) : (
         <p className="text-sm italic text-zinc-400 dark:text-zinc-500">{fr.ai.notYet}</p>
       )}

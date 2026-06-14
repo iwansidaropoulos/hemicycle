@@ -2,23 +2,23 @@
  * Scrutin explanation + summary (brief §7), for the significant scrutins only
  * (solennel / motion de censure / vote on the whole text).
  *
- * The Assemblée nationale open data does not include the exposé des motifs (only
- * descriptive metadata), so to actually explain what a text *does* we ground the
- * model with **Google Search** (Gemini's built-in tool): it looks the text up on
- * the web and writes a substantive, French, neutral explanation, and we keep the
- * cited sources so the output stays verifiable.
+ * Grounded in **Assemblée nationale data only** (no external web): the scrutin
+ * and dossier metadata, plus excerpts from the official verbatim record of the
+ * séance (compte rendu) — where the rapporteur and the minister present the
+ * text and the groups debate it. The model must rely solely on those sources.
  */
 
 import { genai, WRITING_MODEL } from "./client";
 
-const SYSTEM = `Tu rédiges des fiches neutres et factuelles sur des scrutins de l'Assemblée nationale française, en français.
-Sers-toi de la recherche web pour comprendre le texte de loi concerné, puis explique-le.
-Règles :
-- Neutralité absolue : décris ce que le texte propose et ce sur quoi porte le vote, sans jugement de valeur ni prise de position, sans qualifier les camps.
-- Privilégie les sources fiables (Assemblée nationale, Sénat, Légifrance, Vie publique, presse de référence). Si tu ne trouves pas d'information fiable, dis-le plutôt que d'inventer.
-- "explanation" : 4 à 7 phrases qui font comprendre le FOND (objet du texte, principales mesures, contexte, enjeu du vote).
+const SYSTEM = `Tu expliques, en français, l'objet d'un texte soumis au vote à l'Assemblée nationale.
+Tu t'appuies UNIQUEMENT sur les sources officielles fournies : l'intitulé du scrutin et du dossier, et les extraits du compte rendu de la séance (débats).
+Sers-toi notamment de la présentation du texte par le rapporteur ou le ministre, et de la discussion, pour décrire ce que le texte propose.
+Règles strictes :
+- Neutralité absolue : décris l'objet et les mesures du texte, sans jugement ni prise de position.
+- Uniquement les sources fournies. N'utilise aucune connaissance extérieure. Si une information n'y figure pas, ne l'invente pas.
+- "explanation" : 4 à 7 phrases faisant comprendre le FOND (objet du texte, principales mesures, enjeu du vote).
 - "summary" : une seule phrase de synthèse.
-- Réponds UNIQUEMENT par un objet JSON: {"explanation": "...", "summary": "..."}. Pas de texte hors du JSON.`;
+- Réponds UNIQUEMENT par un objet JSON: {"explanation": "...", "summary": "..."}. Pas de texte hors du JSON. N'utilise pas de markdown.`;
 
 export interface ScrutinInput {
   titre: string;
@@ -27,18 +27,12 @@ export interface ScrutinInput {
   dossierType: string | null;
 }
 
-export interface ScrutinSource {
-  title: string;
-  url: string;
-}
-
 export interface ScrutinExplanation {
   explanation: string;
   summary: string;
-  sources: ScrutinSource[];
 }
 
-/** Source block used for the prompt and for the change-detection hash. */
+/** Metadata block (also used for the change-detection hash). */
 export function explanationSource(s: ScrutinInput): string {
   return [
     `Intitulé du scrutin : ${s.titre}`,
@@ -48,56 +42,47 @@ export function explanationSource(s: ScrutinInput): string {
   ].join("\n");
 }
 
-/** Extract {explanation, summary} from a possibly-fenced JSON-ish text. */
-function parseOutput(text: string): { explanation: string; summary: string } {
+function parseOutput(text: string): ScrutinExplanation {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start !== -1 && end > start) {
     try {
-      const obj = JSON.parse(text.slice(start, end + 1)) as {
-        explanation?: string;
-        summary?: string;
-      };
+      const obj = JSON.parse(text.slice(start, end + 1)) as Partial<ScrutinExplanation>;
       if (obj.explanation) {
         return { explanation: obj.explanation, summary: obj.summary ?? "" };
       }
     } catch {
-      // fall through to plain-text fallback
+      // fall through
     }
   }
-  // Fallback: use the whole text as the explanation, first sentence as summary.
   const clean = text.trim();
-  const firstSentence = clean.split(/(?<=\.)\s/)[0] ?? clean;
-  return { explanation: clean, summary: firstSentence };
+  return { explanation: clean, summary: clean.split(/(?<=\.)\s/)[0] ?? clean };
 }
 
-/** Grounded explanation for a single scrutin, with cited web sources. */
-export async function explainScrutinGrounded(
+/**
+ * Explain a scrutin's text, grounded in its metadata and the séance debate
+ * transcript. `transcript` may be empty if no record is available.
+ */
+export async function explainScrutinFromDebate(
   s: ScrutinInput,
+  transcript: string,
 ): Promise<ScrutinExplanation> {
+  const contents = [
+    `Le scrutin porte sur : ${s.titre}`,
+    `Explique CE texte précisément.`,
+    ``,
+    `Sources officielles :`,
+    explanationSource(s),
+    ``,
+    `Extraits du compte rendu de la séance (débats) :`,
+    transcript || "(compte rendu non disponible)",
+  ].join("\n");
+
   const res = await genai.models.generateContent({
     model: WRITING_MODEL,
-    contents: `Explique ce scrutin en t'appuyant sur une recherche web du texte de loi concerné.\n\n${explanationSource(s)}`,
-    config: {
-      systemInstruction: SYSTEM,
-      tools: [{ googleSearch: {} }],
-      temperature: 0,
-    },
+    contents,
+    config: { systemInstruction: SYSTEM, temperature: 0.2 },
   });
 
-  const { explanation, summary } = parseOutput(res.text ?? "");
-
-  // Collect the grounding sources (deduped by url).
-  const chunks =
-    res.candidates?.[0]?.groundingMetadata?.groundingChunks ?? [];
-  const seen = new Set<string>();
-  const sources: ScrutinSource[] = [];
-  for (const c of chunks) {
-    const url = c.web?.uri;
-    if (!url || seen.has(url)) continue;
-    seen.add(url);
-    sources.push({ title: c.web?.title ?? url, url });
-  }
-
-  return { explanation, summary, sources };
+  return parseOutput(res.text ?? "");
 }
