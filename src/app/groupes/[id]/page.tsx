@@ -89,8 +89,8 @@ export default async function GroupPage({
         <span className="text-xs uppercase tracking-wide text-zinc-400">
           {fr.groups.sortBy}
         </span>
-        {tab("participation", fr.groups.sortParticipation)}
         {tab("date", fr.groups.sortDate)}
+        {tab("participation", fr.groups.sortParticipation)}
       </div>
 
       <div className="space-y-3">

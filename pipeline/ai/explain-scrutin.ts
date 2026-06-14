@@ -10,15 +10,16 @@
 
 import { genai, WRITING_MODEL } from "./client";
 
-const SYSTEM = `Tu expliques, en français, l'objet d'un texte soumis au vote à l'Assemblée nationale.
+const SYSTEM = `Tu analyses, en français, un texte soumis au vote à l'Assemblée nationale.
 Tu t'appuies UNIQUEMENT sur les sources officielles fournies : l'intitulé du scrutin et du dossier, et les extraits du compte rendu de la séance (débats).
-Sers-toi notamment de la présentation du texte par le rapporteur ou le ministre, et de la discussion, pour décrire ce que le texte propose.
 Règles strictes :
-- Neutralité absolue : décris l'objet et les mesures du texte, sans jugement ni prise de position.
+- Neutralité absolue : rapporte les faits et les arguments des uns et des autres, sans jugement ni prise de position propre.
 - Uniquement les sources fournies. N'utilise aucune connaissance extérieure. Si une information n'y figure pas, ne l'invente pas.
-- "explanation" : 4 à 7 phrases faisant comprendre le FOND (objet du texte, principales mesures, enjeu du vote).
+- "explanation" : 4 à 7 phrases sur le FOND du texte (objet, principales mesures, enjeu), d'après la présentation par le rapporteur/ministre et la discussion.
+- "argumentsPour" : les arguments avancés EN FAVEUR du texte pendant le débat ; précise quels groupes/orateurs les portent. 2 à 5 phrases. Si le débat n'en contient pas, écris "Non précisé dans le compte rendu.".
+- "argumentsContre" : les arguments avancés CONTRE le texte ; précise quels groupes/orateurs les portent. 2 à 5 phrases. Même consigne si absent.
 - "summary" : une seule phrase de synthèse.
-- Réponds UNIQUEMENT par un objet JSON: {"explanation": "...", "summary": "..."}. Pas de texte hors du JSON. N'utilise pas de markdown.`;
+- Réponds UNIQUEMENT par un objet JSON: {"explanation","argumentsPour","argumentsContre","summary"}. Pas de texte hors du JSON. Tu peux mettre en gras avec **…**.`;
 
 export interface ScrutinInput {
   titre: string;
@@ -29,6 +30,8 @@ export interface ScrutinInput {
 
 export interface ScrutinExplanation {
   explanation: string;
+  argumentsPour: string;
+  argumentsContre: string;
   summary: string;
 }
 
@@ -49,14 +52,24 @@ function parseOutput(text: string): ScrutinExplanation {
     try {
       const obj = JSON.parse(text.slice(start, end + 1)) as Partial<ScrutinExplanation>;
       if (obj.explanation) {
-        return { explanation: obj.explanation, summary: obj.summary ?? "" };
+        return {
+          explanation: obj.explanation,
+          argumentsPour: obj.argumentsPour ?? "",
+          argumentsContre: obj.argumentsContre ?? "",
+          summary: obj.summary ?? "",
+        };
       }
     } catch {
       // fall through
     }
   }
   const clean = text.trim();
-  return { explanation: clean, summary: clean.split(/(?<=\.)\s/)[0] ?? clean };
+  return {
+    explanation: clean,
+    argumentsPour: "",
+    argumentsContre: "",
+    summary: clean.split(/(?<=\.)\s/)[0] ?? clean,
+  };
 }
 
 /**

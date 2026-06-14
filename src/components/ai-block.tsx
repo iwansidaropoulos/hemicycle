@@ -8,7 +8,7 @@ export interface AiSource {
 }
 
 /** Render minimal markdown: paragraphs (blank lines) and **bold** spans. */
-function RichText({ text }: { text: string }) {
+export function RichText({ text }: { text: string }) {
   const paragraphs = text.trim().split(/\n{2,}/);
   return (
     <div className="space-y-2 text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">

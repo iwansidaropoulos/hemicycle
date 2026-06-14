@@ -32,12 +32,9 @@ import {
   explanationSource,
   type ScrutinInput,
 } from "./ai/explain-scrutin";
+import { deriveTextKey } from "./parse/scrutins";
 import type { Intervention } from "./parse/comptes-rendus";
-import {
-  buildTranscript,
-  summarizeSession,
-  type SessionIntervention,
-} from "./ai/summarize-session";
+import { buildTranscript, type SessionIntervention } from "./ai/summarize-session";
 
 const STATE_FILE = resolve(process.cwd(), "data/last-enrich.json");
 
@@ -172,6 +169,31 @@ function toSessionInterventions(
     }));
 }
 
+/** Populate scrutins.text_key for rows ingested before the column existed. */
+async function backfillTextKeys(): Promise<void> {
+  const rows = await db
+    .select({ id: schema.scrutins.id, titre: schema.scrutins.titre })
+    .from(schema.scrutins)
+    .where(sql`${schema.scrutins.textKey} IS NULL`);
+  if (rows.length === 0) return;
+
+  // Group ids by computed key → one UPDATE per distinct text (hundreds, not 7k).
+  const byKey = new Map<string, string[]>();
+  for (const r of rows) {
+    const key = deriveTextKey(r.titre);
+    (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(r.id);
+  }
+  log(`backfilling text_key for ${rows.length} scrutins (${byKey.size} texts)...`);
+  for (const [key, ids] of byKey) {
+    for (const part of chunk(ids, 200)) {
+      await db
+        .update(schema.scrutins)
+        .set({ textKey: key })
+        .where(inArray(schema.scrutins.id, part));
+    }
+  }
+}
+
 async function explainScrutins(limit: number): Promise<number> {
   // Eligible = solennel / motion de censure / vote on the whole text.
   const eligible = await db
@@ -199,9 +221,9 @@ async function explainScrutins(limit: number): Promise<number> {
     dossierTitre: row.dTitre,
     dossierType: row.dType,
   });
-  // Tagged "|debate" so switching strategy (web → compte rendu) re-generates.
+  // Tagged so a prompt/strategy change re-generates (now includes pour/contre).
   const hashOf = (row: (typeof eligible)[number]) =>
-    hashSource(`${WRITING_MODEL}|debate`, explanationSource(inputOf(row)));
+    hashSource(`${WRITING_MODEL}|debate-procon`, explanationSource(inputOf(row)));
 
   let todo = eligible.filter((row) => existing.get(row.s.id) !== hashOf(row));
   const priority = (row: (typeof eligible)[number]) =>
@@ -244,6 +266,8 @@ async function explainScrutins(limit: number): Promise<number> {
     const set = {
       explanation: result.explanation,
       summary: result.summary,
+      argumentsPour: result.argumentsPour,
+      argumentsContre: result.argumentsContre,
       sources: null,
       model: WRITING_MODEL,
       sourceHash: hashOf(row),
@@ -262,109 +286,22 @@ async function explainScrutins(limit: number): Promise<number> {
   return done;
 }
 
-async function summarizeSessions(limit: number): Promise<number> {
-  const summarized = new Set(
-    (await db.select({ id: schema.sessionAi.sessionId }).from(schema.sessionAi)).map(
-      (r) => r.id,
-    ),
-  );
-  const allSessions = await db
-    .select({ id: schema.sessions.id, date: schema.sessions.date })
-    .from(schema.sessions);
-  let pending = allSessions.filter((s) => !summarized.has(s.id));
-  if (pending.length === 0) {
-    log("no sessions to summarize");
-    return 0;
-  }
-
-  // Prioritize séances that contain a significant (eligible) scrutin, recent first.
-  const eligibleSeances = new Set(
-    (
-      await db
-        .selectDistinct({ id: schema.scrutins.sessionId })
-        .from(schema.scrutins)
-        .where(
-          or(
-            inArray(schema.scrutins.typeCode, SIGNIFICANT_CODES),
-            eq(schema.scrutins.isFinal, true),
-          ),
-        )
-    )
-      .map((r) => r.id)
-      .filter((x): x is string => !!x),
-  );
-  pending.sort(
-    (a, b) =>
-      Number(eligibleSeances.has(b.id)) - Number(eligibleSeances.has(a.id)) ||
-      (b.date ?? "").localeCompare(a.date ?? ""),
-  );
-  if (limit > 0) pending = pending.slice(0, limit);
-
-  log(`${pending.length} sessions to summarize`);
-  const index = await loadComptesRendus();
-  const groupByDeputy = await loadGroupByDeputy();
-
-  let count = 0;
-  for (const session of pending) {
-    const interv = interventionsForSeance(index, session.id);
-    const items = interv ? toSessionInterventions(interv, groupByDeputy) : [];
-    if (items.length === 0) {
-      // No usable record — mark processed (empty) so we don't retry forever.
-      await db
-        .insert(schema.sessionAi)
-        .values({ sessionId: session.id, summary: "", model: WRITING_MODEL, generatedAt: sql`CURRENT_TIMESTAMP` })
-        .onConflictDoNothing();
-      continue;
-    }
-
-    let summary: string;
-    try {
-      summary = await callWithBackoff(() => summarizeSession(buildTranscript(items)));
-    } catch (err) {
-      if (isRateLimited(err)) {
-        log(`  daily quota reached — stopping session summaries (resumes next run)`);
-        break;
-      }
-      log(`  session ${session.id} failed: ${(err as Error)?.message ?? err}`);
-      continue;
-    }
-
-    const set = {
-      summary,
-      model: WRITING_MODEL,
-      sourceHash: hashSource(`${WRITING_MODEL}|session`, session.id),
-      generatedAt: sql`CURRENT_TIMESTAMP`,
-    };
-    await db
-      .insert(schema.sessionAi)
-      .values({ sessionId: session.id, ...set })
-      .onConflictDoUpdate({ target: schema.sessionAi.sessionId, set });
-
-    if (++count % 5 === 0 || count === pending.length) {
-      log(`  summarized ${count}/${pending.length} sessions`);
-    }
-    await sleep(DELAY_MS);
-  }
-  return count;
-}
-
 async function main() {
   const startedAt = new Date();
   log(`starting at ${startedAt.toISOString()} (tagging=${TAGGING_MODEL}, writing=${WRITING_MODEL})`);
 
   // Optional cap for cheap test runs (e.g. AI_LIMIT=10), and a scope switch.
   const limit = Number(process.env.AI_LIMIT) || 0;
-  // "themes" | "scrutins" | "sessions" | undefined (all)
-  const only = process.env.ENRICH_ONLY;
+  const only = process.env.ENRICH_ONLY; // "themes" | "scrutins" | undefined (all)
+
+  await backfillTextKeys();
 
   let themes = { dossiers: 0, themes: 0 };
   let explained = 0;
-  let sessions = 0;
 
-  // Order by value: scrutin explanations, then session summaries, then theme
+  // Explanations (with pour/contre, grounded in the debate) first, then theme
   // tagging. Each stops on the free-tier quota and resumes next run.
   if (!only || only === "scrutins") explained = await explainScrutins(limit);
-  if (!only || only === "sessions") sessions = await summarizeSessions(limit);
   if (!only || only === "themes") themes = await tagThemes(limit);
 
   const finishedAt = new Date();
@@ -377,14 +314,13 @@ async function main() {
       dossiersTagged: themes.dossiers,
       themesAdded: themes.themes,
       scrutinsExplained: explained,
-      sessionsSummarized: sessions,
     },
   };
   mkdirSync(dirname(STATE_FILE), { recursive: true });
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + "\n");
   log(
     `done in ${(state.durationMs / 1000).toFixed(1)}s — ` +
-      `+${explained} scrutins, +${sessions} sessions, ${themes.dossiers} dossiers tagged`,
+      `+${explained} scrutins, ${themes.dossiers} dossiers tagged`,
   );
 }
 

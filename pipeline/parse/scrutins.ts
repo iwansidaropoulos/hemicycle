@@ -33,6 +33,7 @@ export interface ParsedScrutin {
     countNonVotant: number;
     sessionId: string | null;
     dossierId: string | null;
+    textKey: string;
     url: string;
   };
   session: { id: string; date: string | null } | null;
@@ -111,6 +112,30 @@ function detectIsFinal(titre: string, objet: string): boolean {
   return `${titre} ${objet}`.toLowerCase().includes("ensemble");
 }
 
+/**
+ * Normalized identity of the underlying text, derived from the title. Anchors
+ * on the "projet/proposition de loi…" phrase so that an amendment, an article
+ * and the final vote on the same text all map to the same key (the trailing
+ * "(Nème lecture)" is kept, to keep readings distinct). Titles without such a
+ * phrase (motions, declarations) key on the whole title.
+ */
+export function deriveTextKey(titre: string): string {
+  const t = (titre ?? "").trim();
+  const lower = t.toLowerCase();
+  let idx = -1;
+  for (const anchor of ["projet de loi", "proposition de loi", "proposition de résolution"]) {
+    const i = lower.indexOf(anchor);
+    if (i >= 0 && (idx === -1 || i < idx)) idx = i;
+  }
+  const core = idx >= 0 ? t.slice(idx) : t;
+  return core
+    .toLowerCase()
+    .replace(/[’‘`]/g, "'") // unify apostrophes (AN titles mix ' and ’)
+    .replace(/[«»"]/g, '"') // unify quotes
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 function collectVotes(
   scrutinId: string,
   bucket: RawBucket | null | undefined,
@@ -152,6 +177,7 @@ export function parseScrutin(raw: RawScrutinFile): ParsedScrutin {
       toInt(decompte.nonVotants) + toInt(decompte.nonVotantsVolontaires),
     sessionId,
     dossierId: s.objet?.dossierLegislatif?.dossierRef ?? null,
+    textKey: deriveTextKey(titre),
     url: officialScrutinUrl(toInt(s.numero)),
   };
 

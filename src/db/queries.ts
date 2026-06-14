@@ -3,7 +3,7 @@
  * function here is a fast Turso read — no LLM calls, no heavy work (brief §2).
  */
 
-import { and, desc, eq, inArray, like, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, like, or, sql } from "drizzle-orm";
 
 import { db } from "./client";
 import {
@@ -15,7 +15,6 @@ import {
   scrutinGroupResults,
   scrutins,
   sessionAi,
-  sessions,
   votes,
   type VotePosition,
 } from "./schema";
@@ -204,6 +203,24 @@ export async function getScrutinAi(scrutinId: string) {
   return rows[0] ?? null;
 }
 
+/**
+ * AI analysis for a scrutin's text: the scrutin's own row if present, otherwise
+ * the analysis of a sibling scrutin sharing the same textKey (e.g. an amendment
+ * inherits the analysis generated for its text's final vote).
+ */
+export async function getScrutinAiForText(scrutinId: string, textKey: string | null) {
+  const own = await getScrutinAi(scrutinId);
+  if (own?.explanation) return own;
+  if (!textKey) return own;
+  const rows = await db
+    .select({ ai: scrutinAi })
+    .from(scrutinAi)
+    .innerJoin(scrutins, eq(scrutins.id, scrutinAi.scrutinId))
+    .where(and(eq(scrutins.textKey, textKey), isNotNull(scrutinAi.explanation)))
+    .limit(1);
+  return rows[0]?.ai ?? own;
+}
+
 export async function getSessionAi(sessionId: string) {
   const rows = await db
     .select()
@@ -215,7 +232,7 @@ export async function getSessionAi(sessionId: string) {
 
 /** Enrichment progress for the admin status page. */
 export async function getEnrichmentProgress() {
-  const [scrutinsTotal, scrutinsEligible, scrutinsExplained, dossiersTotal, dossiersTagged, scrutinsWithTheme, sessionsTotal, sessionsSummarized] =
+  const [scrutinsTotal, scrutinsEligible, scrutinsExplained, dossiersTotal, dossiersTagged, scrutinsWithTheme] =
     await Promise.all([
       db.select({ n: sql<number>`count(*)` }).from(scrutins),
       db
@@ -237,8 +254,6 @@ export async function getEnrichmentProgress() {
         .select({ n: sql<number>`count(distinct ${scrutins.id})` })
         .from(scrutins)
         .innerJoin(dossierThemes, eq(dossierThemes.dossierId, scrutins.dossierId)),
-      db.select({ n: sql<number>`count(*)` }).from(sessions),
-      db.select({ n: sql<number>`count(*)` }).from(sessionAi),
     ]);
 
   return {
@@ -248,8 +263,6 @@ export async function getEnrichmentProgress() {
     dossiersTotal: Number(dossiersTotal[0]?.n ?? 0),
     dossiersTagged: Number(dossiersTagged[0]?.n ?? 0),
     scrutinsWithTheme: Number(scrutinsWithTheme[0]?.n ?? 0),
-    sessionsTotal: Number(sessionsTotal[0]?.n ?? 0),
-    sessionsSummarized: Number(sessionsSummarized[0]?.n ?? 0),
   };
 }
 

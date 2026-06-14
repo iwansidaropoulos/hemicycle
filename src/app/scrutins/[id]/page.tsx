@@ -1,21 +1,21 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { AiBlock, type AiSource } from "@/components/ai-block";
+import { AiBlock } from "@/components/ai-block";
 import { FormeBadge, ResultBadge } from "@/components/badges";
 import { GroupBreakdown } from "@/components/group-breakdown";
+import { ProsCons } from "@/components/pros-cons";
 import {
   ScrutinHemicycle,
   type ScrutinHemicycleGroup,
 } from "@/components/scrutin-hemicycle";
 import {
   getDossier,
-  getScrutinAi,
+  getScrutinAiForText,
   getScrutinById,
   getScrutinGroupResults,
   getScrutinThemes,
   getScrutinVotes,
-  getSessionAi,
   type SeatVote,
 } from "@/db/queries";
 import { capitalizeFirst, formatDate } from "@/lib/format";
@@ -41,17 +41,13 @@ export default async function ScrutinDetailPage({
   const scrutin = await getScrutinById(id);
   if (!scrutin) notFound();
 
-  const [groupResults, votes, ai, themes, dossier, sessionAi] =
-    await Promise.all([
-      getScrutinGroupResults(id),
-      getScrutinVotes(id),
-      getScrutinAi(id),
-      getScrutinThemes(scrutin.dossierId),
-      scrutin.dossierId ? getDossier(scrutin.dossierId) : Promise.resolve(null),
-      scrutin.sessionId
-        ? getSessionAi(scrutin.sessionId)
-        : Promise.resolve(null),
-    ]);
+  const [groupResults, votes, ai, themes, dossier] = await Promise.all([
+    getScrutinGroupResults(id),
+    getScrutinVotes(id),
+    getScrutinAiForText(id, scrutin.textKey),
+    getScrutinThemes(scrutin.dossierId),
+    scrutin.dossierId ? getDossier(scrutin.dossierId) : Promise.resolve(null),
+  ]);
 
   // Largest groups first for the breakdown table.
   const ordered = [...groupResults].sort(
@@ -71,16 +67,6 @@ export default async function ScrutinDetailPage({
       effectif: result.effectif,
     }),
   );
-
-  // Grounding sources stored as a JSON string on the AI row.
-  let aiSources: AiSource[] = [];
-  if (ai?.sources) {
-    try {
-      aiSources = JSON.parse(ai.sources) as AiSource[];
-    } catch {
-      aiSources = [];
-    }
-  }
 
   const votesByGroup = new Map<string, SeatVote[]>();
   for (const v of votes) {
@@ -167,11 +153,9 @@ export default async function ScrutinDetailPage({
         ))}
       </section>
 
-      <AiBlock
-        title={fr.ai.explanation}
-        content={ai?.explanation}
-        sources={aiSources}
-      />
+      <AiBlock title={fr.ai.explanation} content={ai?.explanation} />
+
+      <ProsCons pour={ai?.argumentsPour} contre={ai?.argumentsContre} />
 
       {/* Hemicycle */}
       <section className="space-y-2">
@@ -188,8 +172,6 @@ export default async function ScrutinDetailPage({
         </h2>
         <GroupBreakdown results={ordered} votesByGroup={votesByGroup} />
       </section>
-
-      <AiBlock title={fr.ai.sessionSummary} content={sessionAi?.summary} />
     </article>
   );
 }

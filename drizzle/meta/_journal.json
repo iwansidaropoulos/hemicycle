@@ -22,6 +22,13 @@
       "when": 1781388948564,
       "tag": "0002_loud_korg",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1781454079193,
+      "tag": "0003_serious_miracleman",
+      "breakpoints": true
     }
   ]
 }

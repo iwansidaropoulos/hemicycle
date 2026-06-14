@@ -113,12 +113,17 @@ export const scrutins = sqliteTable(
     // Parent legislative file; lets us roll amendment votes up to their text.
     // No FK: the referenced dossier may not be present in the dossiers archive.
     dossierId: text("dossier_id"),
+    // Normalized identity of the underlying text (derived from the title), so
+    // all votes on the same text (amendments, articles, final vote) can share
+    // one AI analysis even when the open data has no dossier link.
+    textKey: text("text_key"),
     url: text("url"),
   },
   (t) => [
     index("scrutins_date_idx").on(t.date),
     index("scrutins_dossier_idx").on(t.dossierId),
     index("scrutins_session_idx").on(t.sessionId),
+    index("scrutins_textkey_idx").on(t.textKey),
     // Used to find the small subset eligible for costly AI enrichment.
     index("scrutins_forme_final_idx").on(t.forme, t.isFinal),
   ],
@@ -186,6 +191,9 @@ export const scrutinAi = sqliteTable("scrutin_ai", {
   explanation: text("explanation"),
   // Short neutral summary, in French.
   summary: text("summary"),
+  // Arguments put forward in the debate for / against the text (neutral, French).
+  argumentsPour: text("arguments_pour"),
+  argumentsContre: text("arguments_contre"),
   // JSON array of web sources (title + url) the explanation is grounded in.
   sources: text("sources"),
   generatedAt: text("generated_at").default(sql`CURRENT_TIMESTAMP`),
