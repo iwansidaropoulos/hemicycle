@@ -80,6 +80,12 @@ export default async function StatutPage({
           note="Parmi les scrutins solennels, motions de censure et votes sur l’ensemble d’un texte."
         />
         <Bar
+          label="Séances résumées par IA"
+          done={p.sessionsSummarized}
+          total={p.sessionsTotal}
+          note="Synthèse des débats axée sur les oppositions entre groupes, d’après le compte rendu officiel."
+        />
+        <Bar
           label="Dossiers étiquetés par thème"
           done={p.dossiersTagged}
           total={p.dossiersTotal}

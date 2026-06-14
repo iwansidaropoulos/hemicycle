@@ -10,10 +10,8 @@
  * than aborting the run. A backfill is one-off; subsequent runs only touch new
  * dossiers/scrutins.
  *
- * Session summaries are intentionally NOT generated here: they require the
- * full séance debate text (comptes rendus), which the pipeline does not yet
- * ingest. Generating them from the data we have would violate the grounding
- * rule, so they are left for a later iteration.
+ * Session summaries are generated from the official verbatim record (compte
+ * rendu, downloaded per run), focused on the disagreements between groups.
  *
  * Run with: `npm run enrich`  (env: GEMINI_API_KEY; optional AI_LIMIT, ENRICH_ONLY)
  */
@@ -25,6 +23,8 @@ import { dirname, resolve } from "node:path";
 import { eq, inArray, isNotNull, or, sql } from "drizzle-orm";
 
 import { db, schema } from "./db";
+import { DATASETS } from "./config";
+import { downloadAndIterateText } from "./lib/archive";
 import { chunk, sleep } from "./lib/util";
 import { TAGGING_MODEL, WRITING_MODEL, isRateLimited } from "./ai/client";
 import { tagDossiersBatch } from "./ai/tag-themes";
@@ -33,6 +33,12 @@ import {
   explanationSource,
   type ScrutinInput,
 } from "./ai/explain-scrutin";
+import { parseInterventions, parseSeanceRef } from "./parse/comptes-rendus";
+import {
+  buildTranscript,
+  summarizeSession,
+  type SessionIntervention,
+} from "./ai/summarize-session";
 
 const STATE_FILE = resolve(process.cwd(), "data/last-enrich.json");
 
@@ -213,22 +219,147 @@ async function explainScrutins(limit: number): Promise<number> {
   return done;
 }
 
+// Speakers that are pure procedure (the sitting's president) — skipped.
+const PRESIDENT_RE = /^(mme|m\.)\s+(la présidente|le président)$/i;
+// Cap on how many séance records we hold in memory per run.
+const SESSION_COLLECT_CAP = 80;
+
+async function summarizeSessions(limit: number): Promise<number> {
+  // Sessions not yet summarized.
+  const done = new Set(
+    (await db.select({ id: schema.sessionAi.sessionId }).from(schema.sessionAi)).map(
+      (r) => r.id,
+    ),
+  );
+  const allSessions = await db
+    .select({ id: schema.sessions.id, date: schema.sessions.date })
+    .from(schema.sessions);
+  const pending = allSessions.filter((s) => !done.has(s.id));
+  if (pending.length === 0) {
+    log("no sessions to summarize");
+    return 0;
+  }
+
+  // Prioritize séances that contain a significant (eligible) scrutin.
+  const eligibleSeances = new Set(
+    (
+      await db
+        .selectDistinct({ id: schema.scrutins.sessionId })
+        .from(schema.scrutins)
+        .where(
+          or(
+            inArray(schema.scrutins.typeCode, SIGNIFICANT_CODES),
+            eq(schema.scrutins.isFinal, true),
+          ),
+        )
+    )
+      .map((r) => r.id)
+      .filter((x): x is string => !!x),
+  );
+  const eligiblePending = pending.filter((s) => eligibleSeances.has(s.id));
+  const target = new Set(
+    (eligiblePending.length >= 20 ? eligiblePending : pending).map((s) => s.id),
+  );
+  const dateById = new Map(pending.map((s) => [s.id, s.date ?? ""]));
+
+  // Map deputy uid → group label (for attributing each speaker to a group).
+  const groupByDeputy = new Map(
+    (
+      await db
+        .select({
+          id: schema.deputies.id,
+          abrege: schema.groups.abrege,
+          libelle: schema.groups.libelle,
+        })
+        .from(schema.deputies)
+        .leftJoin(schema.groups, eq(schema.groups.id, schema.deputies.groupId))
+    ).map((r) => [r.id, r.abrege ?? r.libelle ?? null]),
+  );
+
+  log(`${pending.length} sessions to summarize — downloading debate records...`);
+  const collected: Array<{ seanceRef: string; xml: string }> = [];
+  await downloadAndIterateText(DATASETS.comptesRendus, (_path, xml) => {
+    if (collected.length >= SESSION_COLLECT_CAP) return;
+    const ref = parseSeanceRef(xml);
+    if (ref && target.has(ref)) collected.push({ seanceRef: ref, xml });
+  });
+  // Most recent (and eligible) first.
+  collected.sort(
+    (a, b) =>
+      Number(eligibleSeances.has(b.seanceRef)) - Number(eligibleSeances.has(a.seanceRef)) ||
+      (dateById.get(b.seanceRef) ?? "").localeCompare(dateById.get(a.seanceRef) ?? ""),
+  );
+
+  const todo = limit > 0 ? collected.slice(0, limit) : collected;
+  log(`${collected.length} debate records matched, summarizing...`);
+
+  let count = 0;
+  for (const { seanceRef, xml } of todo) {
+    const interventions: SessionIntervention[] = parseInterventions(xml)
+      .filter((i) => !PRESIDENT_RE.test(i.speaker) && i.text.length >= 40)
+      .map((i) => ({
+        speaker: i.speaker,
+        group: i.acteurId ? groupByDeputy.get(i.acteurId) ?? null : null,
+        text: i.text,
+      }));
+    if (interventions.length === 0) {
+      // Mark as processed with an empty summary so we don't retry forever.
+      await db
+        .insert(schema.sessionAi)
+        .values({ sessionId: seanceRef, summary: "", model: WRITING_MODEL, generatedAt: sql`CURRENT_TIMESTAMP` })
+        .onConflictDoNothing();
+      continue;
+    }
+
+    let summary: string;
+    try {
+      summary = await callWithBackoff(() => summarizeSession(buildTranscript(interventions)));
+    } catch (err) {
+      if (isRateLimited(err)) {
+        log(`  daily quota reached — stopping session summaries (resumes next run)`);
+        break;
+      }
+      log(`  session ${seanceRef} failed: ${(err as Error)?.message ?? err}`);
+      continue;
+    }
+
+    const set = {
+      summary,
+      model: WRITING_MODEL,
+      sourceHash: hashSource(`${WRITING_MODEL}|session`, seanceRef),
+      generatedAt: sql`CURRENT_TIMESTAMP`,
+    };
+    await db
+      .insert(schema.sessionAi)
+      .values({ sessionId: seanceRef, ...set })
+      .onConflictDoUpdate({ target: schema.sessionAi.sessionId, set });
+
+    if (++count % 5 === 0 || count === todo.length) {
+      log(`  summarized ${count}/${todo.length} sessions`);
+    }
+    await sleep(DELAY_MS);
+  }
+  return count;
+}
+
 async function main() {
   const startedAt = new Date();
   log(`starting at ${startedAt.toISOString()} (tagging=${TAGGING_MODEL}, writing=${WRITING_MODEL})`);
 
   // Optional cap for cheap test runs (e.g. AI_LIMIT=10), and a scope switch.
   const limit = Number(process.env.AI_LIMIT) || 0;
-  const only = process.env.ENRICH_ONLY; // "themes" | "scrutins" | undefined (both)
+  // "themes" | "scrutins" | "sessions" | undefined (all)
+  const only = process.env.ENRICH_ONLY;
 
   let themes = { dossiers: 0, themes: 0 };
   let explained = 0;
+  let sessions = 0;
 
-  // Explanations first: they are the high-value, small set (~230 significant
-  // scrutins). Theme tagging (thousands of dossiers) then fills the remaining
-  // budget and converges over subsequent runs under the free-tier limits.
-  if (only !== "themes") explained = await explainScrutins(limit);
-  if (only !== "scrutins") themes = await tagThemes(limit);
+  // Order by value: scrutin explanations, then session summaries, then theme
+  // tagging. Each stops on the free-tier quota and resumes next run.
+  if (!only || only === "scrutins") explained = await explainScrutins(limit);
+  if (!only || only === "sessions") sessions = await summarizeSessions(limit);
+  if (!only || only === "themes") themes = await tagThemes(limit);
 
   const finishedAt = new Date();
   const state = {
@@ -240,13 +371,14 @@ async function main() {
       dossiersTagged: themes.dossiers,
       themesAdded: themes.themes,
       scrutinsExplained: explained,
+      sessionsSummarized: sessions,
     },
   };
   mkdirSync(dirname(STATE_FILE), { recursive: true });
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2) + "\n");
   log(
     `done in ${(state.durationMs / 1000).toFixed(1)}s — ` +
-      `${themes.dossiers} dossiers tagged (+${themes.themes} themes), ${explained} scrutins explained`,
+      `+${explained} scrutins, +${sessions} sessions, ${themes.dossiers} dossiers tagged`,
   );
 }
 

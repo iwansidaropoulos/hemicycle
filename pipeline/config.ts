@@ -21,6 +21,8 @@ export const DATASETS = {
   dossiers: `${REPO_BASE}/${LEGISLATURE}/loi/dossiers_legislatifs/Dossiers_Legislatifs.json.zip`,
   // Active deputies with their active mandates and the organes (incl. groups).
   acteurs: `${REPO_BASE}/${LEGISLATURE}/amo/deputes_actifs_mandats_actifs_organes/AMO10_deputes_actifs_mandats_actifs_organes.json.zip`,
+  // Verbatim debate records of public sittings (syceron XML), one file per séance.
+  comptesRendus: `${REPO_BASE}/${LEGISLATURE}/vp/syceronbrut/syseron.xml.zip`,
 } as const;
 
 /** Build the official website URL for a scrutin (the "lien officiel"). */

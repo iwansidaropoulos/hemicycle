@@ -15,6 +15,7 @@ import {
   scrutinGroupResults,
   scrutins,
   sessionAi,
+  sessions,
   votes,
   type VotePosition,
 } from "./schema";
@@ -94,7 +95,7 @@ export async function listScrutinsForGroup(
   {
     limit = PAGE_SIZE,
     offset = 0,
-    sort = "participation",
+    sort = "date",
   }: { limit?: number; offset?: number; sort?: GroupSort } = {},
 ) {
   // Participation rate of this group on the scrutin = expressed / headcount.
@@ -214,7 +215,7 @@ export async function getSessionAi(sessionId: string) {
 
 /** Enrichment progress for the admin status page. */
 export async function getEnrichmentProgress() {
-  const [scrutinsTotal, scrutinsEligible, scrutinsExplained, dossiersTotal, dossiersTagged, scrutinsWithTheme] =
+  const [scrutinsTotal, scrutinsEligible, scrutinsExplained, dossiersTotal, dossiersTagged, scrutinsWithTheme, sessionsTotal, sessionsSummarized] =
     await Promise.all([
       db.select({ n: sql<number>`count(*)` }).from(scrutins),
       db
@@ -236,6 +237,8 @@ export async function getEnrichmentProgress() {
         .select({ n: sql<number>`count(distinct ${scrutins.id})` })
         .from(scrutins)
         .innerJoin(dossierThemes, eq(dossierThemes.dossierId, scrutins.dossierId)),
+      db.select({ n: sql<number>`count(*)` }).from(sessions),
+      db.select({ n: sql<number>`count(*)` }).from(sessionAi),
     ]);
 
   return {
@@ -245,6 +248,8 @@ export async function getEnrichmentProgress() {
     dossiersTotal: Number(dossiersTotal[0]?.n ?? 0),
     dossiersTagged: Number(dossiersTagged[0]?.n ?? 0),
     scrutinsWithTheme: Number(scrutinsWithTheme[0]?.n ?? 0),
+    sessionsTotal: Number(sessionsTotal[0]?.n ?? 0),
+    sessionsSummarized: Number(sessionsSummarized[0]?.n ?? 0),
   };
 }
 

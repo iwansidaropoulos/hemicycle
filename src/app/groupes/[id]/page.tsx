@@ -25,7 +25,7 @@ export default async function GroupPage({
   const group = await getGroupById(id);
   if (!group) notFound();
 
-  const sort: GroupSort = tri === "date" ? "date" : "participation";
+  const sort: GroupSort = tri === "participation" ? "participation" : "date";
   const page = Math.max(1, Number(pageParam) || 1);
   const { rows, total } = await listScrutinsForGroup(id, {
     limit: PAGE_SIZE,
@@ -38,7 +38,7 @@ export default async function GroupPage({
     const active = sort === key;
     return (
       <Link
-        href={`/groupes/${id}${key === "participation" ? "" : "?tri=date"}`}
+        href={`/groupes/${id}${key === "date" ? "" : "?tri=participation"}`}
         className={`rounded-md px-3 py-1.5 text-sm ${
           active
             ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900"
@@ -135,7 +135,7 @@ export default async function GroupPage({
         total={total}
         pageSize={PAGE_SIZE}
         basePath={`/groupes/${id}`}
-        params={{ tri: sort === "date" ? "date" : undefined }}
+        params={{ tri: sort === "participation" ? "participation" : undefined }}
       />
     </div>
   );

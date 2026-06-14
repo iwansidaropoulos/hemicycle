@@ -66,3 +66,22 @@ export async function downloadAndIterate<T = unknown>(
     onEntry(path, JSON.parse(decoder.decode(content)) as T);
   }
 }
+
+/**
+ * Download an archive and invoke `onEntry` with the decoded text of each entry
+ * (used for the XML debate records). Caller controls what to retain.
+ */
+export async function downloadAndIterateText(
+  url: string,
+  onEntry: (path: string, text: string) => void,
+  filter?: (path: string) => boolean,
+): Promise<void> {
+  const bytes = await download(url);
+  const files = unzipSync(bytes);
+  const decoder = new TextDecoder("utf-8");
+  for (const [path, content] of Object.entries(files)) {
+    if (filter && !filter(path)) continue;
+    if (content.length === 0) continue;
+    onEntry(path, decoder.decode(content));
+  }
+}

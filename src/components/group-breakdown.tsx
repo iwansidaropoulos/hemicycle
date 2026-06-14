@@ -8,11 +8,12 @@ import { fr } from "@/lib/i18n";
 type GroupRow = typeof groupsTable.$inferSelect;
 type ResultRow = typeof scrutinGroupResults.$inferSelect;
 
-const SEGMENTS: Array<{ key: keyof Pick<ResultRow, "pour" | "contre" | "abstention" | "nonVotant">; color: string }> = [
+// Only the expressed votes are shown in the bar (one grey = abstention).
+// Non-voting/absent isn't a segment — it's conveyed by the participation %.
+const SEGMENTS: Array<{ key: keyof Pick<ResultRow, "pour" | "contre" | "abstention">; color: string }> = [
   { key: "pour", color: "#16a34a" },
   { key: "abstention", color: "#a1a1aa" },
   { key: "contre", color: "#dc2626" },
-  { key: "nonVotant", color: "#e4e4e7" },
 ];
 
 const POSITION_GROUPS: Array<{ pos: VotePosition; label: string }> = [
@@ -34,7 +35,7 @@ export function GroupBreakdown({
     <div className="divide-y divide-zinc-100 rounded-lg border border-zinc-200 bg-white dark:divide-zinc-800 dark:border-zinc-800 dark:bg-zinc-900">
       {results.map(({ group, result }) => {
         const { participation } = groupStance(result);
-        const total = result.pour + result.contre + result.abstention + result.nonVotant;
+        const total = result.pour + result.contre + result.abstention;
         const deputies = votesByGroup.get(result.groupId) ?? [];
         return (
           <details key={result.groupId} className="group p-4">
