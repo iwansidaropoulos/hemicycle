@@ -1,7 +1,7 @@
 {
-  "startedAt": "2026-06-14T08:42:13.791Z",
-  "finishedAt": "2026-06-14T08:42:23.422Z",
-  "durationMs": 9631,
+  "startedAt": "2026-06-15T10:56:13.538Z",
+  "finishedAt": "2026-06-15T10:56:21.833Z",
+  "durationMs": 8295,
   "counts": {
     "groups": 12,
     "deputies": 577,
@@ -16,6 +16,7 @@
   "datasets": {
     "scrutins": "https://data.assemblee-nationale.fr/static/openData/repository/17/loi/scrutins/Scrutins.json.zip",
     "dossiers": "https://data.assemblee-nationale.fr/static/openData/repository/17/loi/dossiers_legislatifs/Dossiers_Legislatifs.json.zip",
-    "acteurs": "https://data.assemblee-nationale.fr/static/openData/repository/17/amo/deputes_actifs_mandats_actifs_organes/AMO10_deputes_actifs_mandats_actifs_organes.json.zip"
+    "acteurs": "https://data.assemblee-nationale.fr/static/openData/repository/17/amo/deputes_actifs_mandats_actifs_organes/AMO10_deputes_actifs_mandats_actifs_organes.json.zip",
+    "comptesRendus": "https://data.assemblee-nationale.fr/static/openData/repository/17/vp/syceronbrut/syseron.xml.zip"
   }
 }
