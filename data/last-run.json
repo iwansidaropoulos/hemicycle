@@ -1,11 +1,11 @@
 {
-  "startedAt": "2026-07-23T07:33:56.927Z",
-  "finishedAt": "2026-07-23T07:34:07.803Z",
-  "durationMs": 10876,
+  "startedAt": "2026-07-24T07:32:52.573Z",
+  "finishedAt": "2026-07-24T07:33:07.668Z",
+  "durationMs": 15095,
   "counts": {
     "groups": 12,
     "deputies": 577,
-    "dossiers": 2794,
+    "dossiers": 2821,
     "sessionsNew": 0,
     "scrutinsTotalAvailable": 8434,
     "scrutinsInDbBefore": 8434,
