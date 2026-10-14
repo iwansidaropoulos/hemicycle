@@ -1,17 +1,17 @@
 {
-  "startedAt": "2026-10-13T12:30:06.634Z",
-  "finishedAt": "2026-10-13T12:30:31.989Z",
-  "durationMs": 25355,
+  "startedAt": "2026-10-14T09:57:32.461Z",
+  "finishedAt": "2026-10-14T09:57:55.430Z",
+  "durationMs": 22969,
   "counts": {
     "groups": 12,
     "deputies": 574,
-    "dossiers": 3057,
+    "dossiers": 3103,
     "sessionsNew": 2,
-    "scrutinsTotalAvailable": 8696,
-    "scrutinsInDbBefore": 8672,
-    "scrutinsInserted": 24,
-    "groupResultsInserted": 288,
-    "votesInserted": 2029
+    "scrutinsTotalAvailable": 8707,
+    "scrutinsInDbBefore": 8696,
+    "scrutinsInserted": 11,
+    "groupResultsInserted": 132,
+    "votesInserted": 4161
   },
   "datasets": {
     "scrutins": "https://data.assemblee-nationale.fr/static/openData/repository/17/loi/scrutins/Scrutins.json.zip",
