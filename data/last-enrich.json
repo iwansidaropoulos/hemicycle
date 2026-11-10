@@ -1,14 +1,14 @@
 {
-  "startedAt": "2026-11-09T13:41:03.238Z",
-  "finishedAt": "2026-11-09T13:41:06.727Z",
-  "durationMs": 3489,
+  "startedAt": "2026-11-10T13:18:09.713Z",
+  "finishedAt": "2026-11-10T13:18:17.247Z",
+  "durationMs": 7534,
   "models": {
     "tagging": "gemini-2.5-flash-lite",
     "writing": "gemini-2.5-flash"
   },
   "counts": {
-    "dossiersTagged": 0,
-    "themesAdded": 0,
+    "dossiersTagged": 1,
+    "themesAdded": 3,
     "scrutinsExplained": 0
   }
 }
