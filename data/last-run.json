@@ -1,14 +1,14 @@
 {
-  "startedAt": "2026-11-24T15:36:09.709Z",
-  "finishedAt": "2026-11-24T15:36:19.258Z",
-  "durationMs": 9549,
+  "startedAt": "2026-11-28T13:57:52.958Z",
+  "finishedAt": "2026-11-28T13:58:02.626Z",
+  "durationMs": 9668,
   "counts": {
     "groups": 12,
     "deputies": 574,
-    "dossiers": 3248,
+    "dossiers": 3276,
     "sessionsNew": 0,
-    "scrutinsTotalAvailable": 10101,
-    "scrutinsInDbBefore": 10101,
+    "scrutinsTotalAvailable": 10175,
+    "scrutinsInDbBefore": 10175,
     "scrutinsInserted": 0,
     "groupResultsInserted": 0,
     "votesInserted": 0
